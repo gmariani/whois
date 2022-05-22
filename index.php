@@ -1195,6 +1195,8 @@ function check_default_records(&$dns_records, $domain)
     $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('x._domainkey.' . $domain, DNS_TXT));
     // Mailgun
     $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('smtp._domainkey.' . $domain, DNS_TXT));
+    // turboSMTP
+    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('turbo-smtp._domainkey.' . $domain, DNS_TXT));
     // SendGrid
     $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('s1._domainkey.' . $domain, DNS_TXT));
     $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('s2._domainkey.' . $domain, DNS_TXT));
