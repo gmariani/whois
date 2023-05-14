@@ -182,16 +182,33 @@ function get_dns_record($host, $type)
                         $rr_data['minimum-ttl'] = $rr->minimum;
                     }
                     if ($type === DNS_TXT) {
+
                         // When TXT is a CNAME
                         if (property_exists($rr, 'text')) {
                             $rr_data['txt'] = implode("", $rr->text);
                             $rr_data['entries'] = $rr->text;
                         } else {
+                            // error_log(print_r($rr, true));
+                            // error_log("dns_get_record({$rr->cname}, {$type})");
                             // Switch to the native since it recurses better,
                             // but save the corrected TTL
-                            $temp = dns_get_record($host, $type);
-                            $rr_data = $temp[0];
-                            $rr_data['ttl'] = $rr->ttl;
+                            $temp = dns_get_record($rr->cname, $type);
+                            // error_log(print_r($temp, true));
+
+                            // error_log("get_dns_record({$rr->cname}, {$rr->type})");
+                            $temp2 = get_dns_record($rr->cname, $rr->type);
+                            // error_log(print_r($temp2, true));
+
+                            if (count($temp)) {
+                                $rr_data = $temp[0];
+                                $rr_data['ttl'] = $rr->ttl;
+                            } else {
+                                // Sometimes it won't give a response for whatever reason (_acme-challenge.nsone.net)
+                                $rr_data['host'] = $rr->cname;
+                                $rr_data['txt'] = '?';
+                                $rr_data['type'] = 'TXT';
+                                $rr_data['entries'] = [];
+                            }
                         }
                     }
                     if ($type === DNS_AAAA) {
@@ -2497,9 +2514,9 @@ function translate_org($org)
                             }
                             if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "\n";
 
-                            if (count($dns_records['ds']) > 0) $zoneExportRaw .= "; DS Record\n";
+                            // if (count($dns_records['ds']) > 0) $zoneExportRaw .= "; DS Record\n";
                             foreach ($dns_records['ds'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['keytag']}\t{$record['algorithm']}\t{$record['digesttype']}\t{$record['digest']}\n";
+                                // $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['keytag']}\t{$record['algorithm']}\t{$record['digesttype']}\t{$record['digest']}\n";
 
                                 // DS records are reported by the parent zone
                                 $lookup_host = count($tld_nameservers_hosts) ? $tld_nameservers_hosts[0]['host'] : '?';
@@ -2590,7 +2607,7 @@ function translate_org($org)
                                 </tr>
                             <?php
                             }
-                            if (count($dns_records['ds']) > 0) $zoneExportRaw .= "\n";
+                            // if (count($dns_records['ds']) > 0) $zoneExportRaw .= "\n";
 
                             if (count($dns_records['caa']) > 0) $zoneExportRaw .= "; CAA Record\n";
                             foreach ($dns_records['caa'] as $record) {
@@ -2702,9 +2719,9 @@ function translate_org($org)
                             }
                             if (count($dns_records['srv']) > 0) $zoneExportRaw .= "\n";
 
-                            if (count($dns_records['ptr']) > 0) $zoneExportRaw .= "; PTR Record\n";
+                            // if (count($dns_records['ptr']) > 0) $zoneExportRaw .= "; PTR Record\n";
                             foreach ($dns_records['ptr'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['txt']}\n";
+                                // $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['txt']}\n";
 
                                 $rdns = " <abbr title='Reverse DNS'>&rarr; {$record['host']}</abbr>";
                             ?>
@@ -2717,7 +2734,7 @@ function translate_org($org)
                                 </tr>
                             <?php
                             }
-                            if (count($dns_records['ptr']) > 0) $zoneExportRaw .= "\n";
+                            // if (count($dns_records['ptr']) > 0) $zoneExportRaw .= "\n";
 
                             if (count($dns_records['naptr']) > 0) $zoneExportRaw .= "; NAPTR Record\n";
                             foreach ($dns_records['naptr'] as $record) {
