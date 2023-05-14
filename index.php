@@ -4,46 +4,6 @@ require __DIR__ . '/vendor/autoload.php';
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->load();
 
-// require("vendor/autoload.php");
-// include "Hostinger/DigClient.php";
-// include "Hostinger/ExecuteDigCommand.php";
-// include "Hostinger/RecordTypeFactory.php";
-// include "Hostinger/RecordType/Cname.php";
-// include "Hostinger/RecordType/Mx.php";
-// include "Hostinger/RecordType/Ns.php";
-// include "Hostinger/RecordType/RecordType.php";
-// require __DIR__ . '/autoloader.php';
-
-// AUTO LOADER //
-// function fqcnToPath(string $fqcn, string $prefix)
-// {
-//     // $relativeClass = ltrim($fqcn, $prefix);
-//     $relativeClass = str_replace($prefix, '', $fqcn);
-//     return str_replace('\\', '/', $relativeClass) . '.php';
-// }
-// spl_autoload_register(function (string $class) {
-//     $namespaces = [
-//         'Spatie\\Dns\\' => 'vendor/dns-2.5.3/src'
-//     ];
-
-//     $keyExists = array_filter($namespaces, function ($key) use ($class) {
-//         // return str_starts_with($class, $key) === true;
-//         return strpos($class, $key) === 0;
-//     }, ARRAY_FILTER_USE_KEY);
-
-//     // We don't handle that namespace.
-//     // Return and hope some other autoloader handles it.
-//     if (count($keyExists) === 0) return;
-
-//     $baseDirectory = array_values($keyExists)[0];
-//     $prefix = array_keys($keyExists)[0];
-//     $path = fqcnToPath($class, $prefix);
-//     require $baseDirectory . '/' . $path;
-// });
-// AUTO LOADER //
-
-// use Spatie\Dns\Dns;
-
 error_reporting(E_ALL ^ E_WARNING);
 set_time_limit(20);
 $host_cache = array();
@@ -101,35 +61,184 @@ function get_host_by_name($domain)
 
 function get_dns_record($host, $type)
 {
-    global $dns_cache, $dns_count;
+    global $dns_cache, $dns_count, $tld_dns_resolver, $arpa_dns_resolver, $dns_resolver;
     if (!isset($dns_cache[$host])) {
         $dns_cache[$host] = array();
     }
 
     if (!isset($dns_cache[$host][$type])) {
-        // error_log("Hostinger getRecord {$host} - {$type}");
-        // $client = new Hostinger\DigClient();
-        // $result = $client->getRecord($host, $type);
-        // error_log(print_r($result, true));
 
         // error_log("dns_get_record {$host} - {$type}");
         // BUG: There is no timeout for dns_get_record and it can wait minutes for a reply
         // https://github.com/hostinger/php-dig
         // composer require hostinger/php-dig
 
-        $result = dns_get_record($host, $type);
+        $type_string = '';
+        switch ($type) {
+            case DNS_A:
+                $type_string = 'A';
+                break;
+            case DNS_CNAME:
+                $type_string = 'CNAME';
+                break;
+            case DNS_HINFO:
+                $type_string = 'HINFO';
+                break;
+            case DNS_CAA:
+                $type_string = 'CAA';
+                break;
+            case DNS_MX:
+                $type_string = 'MX';
+                break;
+            case DNS_NS:
+                $type_string = 'NS';
+                break;
+            case DNS_PTR:
+                $type_string = 'PTR';
+                break;
+            case DNS_SOA:
+                $type_string = 'SOA';
+                break;
+            case DNS_TXT:
+                $type_string = 'TXT';
+                break;
+            case DNS_AAAA:
+                $type_string = 'AAAA';
+                break;
+            case DNS_SRV:
+                $type_string = 'SRV';
+                break;
+            case DNS_NAPTR:
+                $type_string = 'NAPTR';
+                break;
+            case DNS_A6:
+                $type_string = 'A6';
+                break;
+            case DNS_DNSKEY:
+                $type_string = 'DNSKEY';
+                break;
+            case DNS_DS:
+                $type_string = 'DS';
+                break;
+        }
 
-        // https://github.com/spatie/dns
-        // $dns = new Dns();
-        // $result = $dns->getRecords($host, $type === DNS_A ? 'A' : 'CNAME'); // returns only A records
-        // if ($host === 'autodiscover.jplcreative.com') {
-        //     error_log("dns_get_record {$host} - {$type}");
-        //     error_log(print_r($result, true));
-        // }
-        // exit;
+        // Save some time if we're only doing a rDNS
+        // error_log($host . ' ' . $type_string);
+        if ((str_ends_with($host, '.in-addr.arpa') || str_ends_with($host, '.ip6.arpa')) && $type !== DNS_PTR) {
+            $result = false;
+        } else {
+            try {
+                $resolver = $dns_resolver;
+                if ($type === DNS_DS) $resolver = $tld_dns_resolver;
+                if ($type === DNS_PTR) $resolver = $arpa_dns_resolver;
 
-        // https://mariani.life/projects/dns/?q=jplcreative.com
-        // https://mariani.life/projects/dns/?q=pipershores.org
+                $query_response = $resolver->query($host, $type_string);
+                $result = [];
+
+                foreach ($query_response->answer as $rr) {
+                    $rr->rdata = '';
+
+                    // if ($type_string != $rr->type) {
+                    // error_log($type_string . ' != ' . $rr->type);
+                    // error_log(print_r($rr, true));
+                    // $test = dns_get_record($host, $type);
+                    // error_log(print_r($test, true));
+                    // }
+
+                    $rr_data = [
+                        'host' => $rr->name,
+                        'class' => $rr->class,
+                        'ttl' => $rr->ttl,
+                        'type' => $rr->type,
+                    ];
+                    if ($type === DNS_A) {
+                        $rr_data['ip'] = $rr->address;
+                    }
+                    if ($type === DNS_CNAME) {
+                        $rr_data['target'] = $rr->cname;
+                    }
+                    if ($type === DNS_CAA) {
+                        $rr_data['flags'] = $rr->flags;
+                        $rr_data['tag'] = $rr->tag;
+                        $rr_data['value'] = $rr->value;
+                    }
+                    if ($type === DNS_MX) {
+                        $rr_data['pri'] = $rr->preference;
+                        $rr_data['target'] = $rr->exchange;
+                    }
+                    if ($type === DNS_NS) {
+                        $rr_data['target'] = $rr->nsdname;
+                    }
+                    if ($type === DNS_PTR) {
+                        $rr_data['target'] = $rr->ptrdname;
+                    }
+                    if ($type === DNS_SOA) {
+                        $rr_data['mname'] = $rr->mname;
+                        $rr_data['rname'] = $rr->rname;
+                        $rr_data['serial'] = $rr->serial;
+                        $rr_data['refresh'] = $rr->refresh;
+                        $rr_data['retry'] = $rr->retry;
+                        $rr_data['expire'] = $rr->expire;
+                        $rr_data['minimum-ttl'] = $rr->minimum;
+                    }
+                    if ($type === DNS_TXT) {
+                        // When TXT is a CNAME
+                        if (property_exists($rr, 'text')) {
+                            $rr_data['txt'] = implode("", $rr->text);
+                            $rr_data['entries'] = $rr->text;
+                        } else {
+                            // Switch to the native since it recurses better,
+                            // but save the corrected TTL
+                            $temp = dns_get_record($host, $type);
+                            $rr_data = $temp[0];
+                            $rr_data['ttl'] = $rr->ttl;
+                        }
+                    }
+                    if ($type === DNS_AAAA) {
+                        $rr_data['ipv6'] = $rr->address;
+                    }
+                    if ($type === DNS_SRV) {
+                        $rr_data['pri'] = $rr->priority;
+                        $rr_data['weight'] = $rr->weight;
+                        $rr_data['port'] = $rr->port;
+                        $rr_data['target'] = $rr->target;
+                    }
+                    if ($type === DNS_NAPTR) {
+                        $rr_data['order'] = $rr->order;
+                        $rr_data['pref'] = $rr->preference;
+                        $rr_data['flags'] = $rr->flags;
+                        $rr_data['services'] = $rr->services;
+                        $rr_data['regex'] = $rr->regexp;
+                        $rr_data['replacement'] = $rr->replacement;
+                    }
+                    if ($type === DNS_DNSKEY) {
+                        $rr_data['flags'] = $rr->flags;
+                        $rr_data['protocol'] = $rr->protocol;
+                        $rr_data['algorithm'] = $rr->algorithm;
+                        $rr_data['key'] = $rr->key;
+                    }
+                    if ($type === DNS_DS) {
+                        $rr_data['keytag'] = $rr->keytag;
+                        $rr_data['algorithm'] = $rr->algorithm;
+                        $rr_data['digesttype'] = $rr->digesttype;
+                        $rr_data['digest'] = $rr->digest;
+                    }
+                    $result[] = $rr_data;
+                }
+            } catch (Net_DNS2_Exception $e) {
+                // Skip
+                $error_message = $e->getMessage();
+                if (!str_contains($error_message, 'The domain name referenced in the query does not exist')) {
+                    error_log("::query() failed: " . $error_message);
+                    error_log(print_r($rr, true));
+                }
+                // $result = dns_get_record($host, $type);
+                $result = false;
+            }
+        }
+        // error_log(print_r($result, true));
+
+        // TXT maps to CNAME, fix it
         foreach ($result as &$record) {
             if ((DNS_TXT === $type || DNS_A === $type) && $host !== $record['host']) {
                 $record['cname'] = $record['host'];
@@ -143,13 +252,6 @@ function get_dns_record($host, $type)
         $dns_cache[$host][$type] = $result;
         $dns_count++;
     }
-
-    // if ($dns_cache[$host][DNS_A] && $dns_cache[$host][DNS_CNAME]) {
-    //     unset($dns_cache[$host][DNS_A]);
-    // }
-    // if ($dns_cache[$host][DNS_TXT] && $dns_cache[$host][DNS_CNAME]) {
-    //     unset($dns_cache[$host][DNS_TXT]);
-    // }
 
     return $dns_cache[$host][$type];
 }
@@ -198,7 +300,8 @@ function get_tld($domain2)
 
     $parts = explode('.', $domain2);
 
-    return '.' . $parts[count($parts) - 1];
+    // return '.' . $parts[count($parts) - 1];
+    return $parts[count($parts) - 1];
 }
 
 function whois_request($hostname, $server)
@@ -252,33 +355,6 @@ function get_whois($domain)
     $whois = whois_request($domain, 'whois.iana.org');
     // if ($debug) error_log($whois);
 
-    // // http://www.iana.org/domains/root/db
-    // $whois_servers = array(
-    //     '.org' => "whois.pir.org",
-    //     '.info' => "whois.afilias.net",
-    //     '.buzz' => "whois.nic.buzz",
-    //     '.edu' => "whois.educause.edu",
-    //     '.li' => "whois.nic.li",
-    //     '.io' => "whois.nic.io",
-    //     '.ni' => "whois.nic.io",
-    //     '.services' => "whois.donuts.co",
-    //     '.agency' => "whois.donuts.co",
-    //     '.life' => "whois.donuts.co",
-    //     '.today' => "whois.donuts.co",
-    //     '.biz' => "whois.biz",
-    //     '.us' => "whois.nic.us",
-    //     '.uk' => "whois.nic.uk",
-    //     '.co' => "whois.nic.co",
-    //     '.work' => "whois.nic.work",
-    //     '.net' => "whois.verisign-grs.com",
-    //     //'.net' => "whois.networksolutions.com",
-    //     '.com' => "whois.verisign-grs.com",
-    //     //'.com' => "whois.networksolutions.com",
-    //     //'.com' => "whois.godaddy.com",
-    //     // '.com' => 'whois.google.com',
-    //     '.stream' => "whois.nic.stream"
-    // ); // whois.godaddy.com
-
     // Check TLD whois
     if (preg_match_all("/^\s*refer:\s+(.+)$/m", $whois, $matches) > 0) {
         $whois_server = $matches[1][0];
@@ -323,25 +399,6 @@ function get_nameservers($whois)
 
     return 'Unknown';
 }
-
-// function get_whois_server($whois, $used)
-// {
-//     $result = false;
-
-//     // Verisign
-//     if (preg_match_all("/^\s*Whois Server:?\s+(.+)$/m", $whois, $matches) == true) {
-//         $result = $matches[1][0];
-//     }
-
-//     if (preg_match_all("/^\s*Registrar WHOIS Server:?\s+(.+)$/m", $whois, $matches) == true) {
-//         $result = $matches[1][0];
-//         // Registrar WHOIS Server: whois.godaddy.com/
-//         $result = get_clean_domain($result);
-//     }
-
-//     if ($result === $used) return false;
-//     return trim($result);
-// }
 
 function get_expiration($whois)
 {
@@ -1157,55 +1214,16 @@ function seconds_to_time($seconds)
     return implode(' ', $result);
 }
 
-/*
-API Limitations
-
-Google Maps - https://developers.google.com/maps/pricing-and-plans/#details
-Free up to 25,000 map loads per day.3
-$0.50 USD / 1,000 additional map loads, up to 100,000 daily, if billing is enabled.
-
-ipinfo.io - https://ipinfo.io/pricing
-1,000 Daily Requests
-
-Arin
-No known limitations
-
-ip-api.com - https://members.ip-api.com/
-Our endpoints are limited to 45 HTTP requests per minute from an IP address.
-If you go over this limit your requests will be throttled (HTTP 429) until your
-rate limit window is reset.
-*/
-
-//$domain = 'nawcc.org';
-$domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : 'google.com';
-//$domain ='boroughs.org';
-$line_breaks = array("\r", "\n");
-$domain = get_clean_domain($domain);
-$root_domain = get_root_domain($domain);
-$is_root_domain = $domain === $root_domain ? true : false;
-$whois = get_whois($domain);
-$ip = get_host_by_name($domain);
-$location = get_location($ip);
-$ssl = has_ssl($domain);
-$http = $ssl ? 'https://' : 'http://';
-$headers = get_headers($http . $domain, 1);
-
-// Follow one redirect to account for WWW vs non-WWW
-// if ($headers && $headers[0] === 'HTTP/1.1 301 Moved Permanently') {
-//     $headers = get_headers($headers['Location'][0], 1);
-// }
-// Get just the last location's data
-foreach ($headers as $key => $value) {
-    if (is_array($value)) {
-        $value = end($value);
+function get_nameservers_ip($host)
+{
+    $response = dns_get_record($host, DNS_NS);
+    if (count($response)) {
+        return array_map(function ($record) {
+            return ['host' => $record['target'], 'ip' => get_host_by_name($record['target'])];
+        }, $response);
     }
-    $headers[$key] = $value;
+    return [];
 }
-
-$geo = $location ? explode(',', $location->loc) : array(0, 0);
-$now = time();
-$date_now = new DateTime();
-$date_now->setTimestamp($now);
 
 function get_location_address($location)
 {
@@ -1262,21 +1280,103 @@ function val_to_string($val)
     }
     return $val;
 }
-// error_log('get_dns_records');
+
+// START //
+/*
+API Limitations
+
+Google Maps - https://developers.google.com/maps/pricing-and-plans/#details
+Free up to 25,000 map loads per day.3
+$0.50 USD / 1,000 additional map loads, up to 100,000 daily, if billing is enabled.
+*/
+
 // New servers are set to deny DNS_ALL and DNS_ANY
 //$dns_records = get_dns_record( $domain, DNS_ALL );
-// TODO CAA
-// TODO hiinfo
-// TODO A6
-// TODO quoery only the authoritiave nameservers to get the true TTL For records, use Net_DNS2 https://netdns2.com/
+// hinfo - deprecated along with ANY
+// A6 - prototype for ipv6, deprecated
+
+// https://en.wikipedia.org/wiki/List_of_DNS_record_types
+// TXT -> CNAME pipershores.org
+// AAAA jplcreative.com
+// NAPTR kutchy.com
+// PTR 139.149.87.209.in-addr.arpa. (coursevector.com rDNS)
+// PTR IPv6 .ip6.arpa (jplcreative.com rDNS)
+// 2606:4700:3034:0:0:0:ac43:acf3 -> 3.f.c.a.3.4.c.a.0.0.0.4.3.0.3.0.0.7.4.6.0.6.2.ip6.arpa
+// CAA caatest.co.uk
+// DNSKEY cloudflare.com
+// DS cloudflare.com must ask parent zone nameserver
+$domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : 'google.com';
+$line_breaks = array("\r", "\n");
+$domain = get_clean_domain($domain);
+$root_domain = get_root_domain($domain);
+$is_root_domain = $domain === $root_domain ? true : false;
+$whois = get_whois($domain);
+$ip = get_host_by_name($domain);
+$location = get_location($ip);
+$ssl = has_ssl($domain);
+$http = $ssl ? 'https://' : 'http://';
+$headers = get_headers($http . $domain, 1);
+$nameservers_hosts = get_nameservers_ip($domain);
+$nameservers = array_map(function ($ns) {
+    return $ns['ip'];
+}, $nameservers_hosts);
+if (count($nameservers) <= 0) {
+    $nameservers = ['1.1.1.1', '9.9.9.9'];
+}
+
+// For PTR lookup
+$arpa_host = implode('.', array_reverse(explode('.', $ip))) . ".in-addr.arpa";
+// error_log($arpa_host);
+$arpa_nameservers_hosts = get_nameservers_ip($arpa_host);
+$arpa_nameservers = array_map(function ($ns) {
+    return $ns['ip'];
+}, $arpa_nameservers_hosts);
+if (count($arpa_nameservers) <= 0) {
+    $arpa_nameservers = ['1.1.1.1', '9.9.9.9'];
+}
+// TODO fail gracefully when given an arpa address directly
+
+// For DS lookup
+$tld = get_tld($domain);
+$tld_nameservers_hosts = get_nameservers_ip($tld);
+$tld_nameservers = array_map(function ($ns) {
+    return $ns['ip'];
+}, $tld_nameservers_hosts);
+if (count($tld_nameservers) <= 0) {
+    $tld_nameservers = ['1.1.1.1', '9.9.9.9'];
+}
+
+// error_log(print_r($nameservers, true));
+$dns_resolver = new Net_DNS2_Resolver(['nameservers' => $nameservers]);
+$tld_dns_resolver = new Net_DNS2_Resolver(['nameservers' => $tld_nameservers]);
+$arpa_dns_resolver = new Net_DNS2_Resolver(['nameservers' => $arpa_nameservers]);
+
+// Get just the last location's data
+foreach ($headers as $key => $value) {
+    if (is_array($value)) {
+        $value = end($value);
+    }
+    $headers[$key] = $value;
+}
+
+$geo = $location ? explode(',', $location->loc) : array(0, 0);
+$now = time();
+$date_now = new DateTime();
+$date_now->setTimestamp($now);
+
+define('DNS_DNSKEY', 1000);
+define('DNS_DS', 1001);
+
 $dns_records = array(
     'a' => get_dns_record($domain, DNS_A),
     'cname' => get_dns_record($domain, DNS_CNAME),
     //'hinfo' => get_dns_record( $domain, DNS_HINFO ),
-    //'caa' => get_dns_record( $domain, DNS_CAA ), // PHP 7.1.2+
+    'dnskey' => get_dns_record($domain, DNS_DNSKEY),
+    'ds' => get_dns_record($domain, DNS_DS),
+    'caa' => get_dns_record($domain, DNS_CAA), // PHP 7.1.2+
     'mx' => get_dns_record($domain, DNS_MX),
     'ns' => get_dns_record($domain, DNS_NS),
-    'ptr' => get_dns_record($domain, DNS_PTR),
+    'ptr' => get_dns_record($arpa_host, DNS_PTR),
     'soa' => get_dns_record($domain, DNS_SOA),
     'txt' => get_dns_record($domain, DNS_TXT),
     'aaaa' => get_dns_record($domain, DNS_AAAA),
@@ -1450,7 +1550,7 @@ function check_default_records(&$dns_records, $domain)
     $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('hs1._domainkey.' . $domain, DNS_CNAME));
     $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('hs2._domainkey.' . $domain, DNS_CNAME));
 
-    // If a CNAME exists for a matchin A or TXT record, remove them as only the CNAME should exist
+    // If a CNAME exists for a matching A or TXT record, remove them as only the CNAME should exist
     foreach ($dns_records['cname'] as $cname_record) {
         $host = $cname_record['host'];
         foreach ($dns_records['a'] as $key => $a_record) {
@@ -1472,7 +1572,6 @@ check_default_records($dns_records, $domain);
 if (!$is_root_domain) {
     check_default_records($dns_records, $root_domain);
 }
-
 
 // Sort MX records by priority
 function sortByPriority($a, $b)
@@ -1552,521 +1651,37 @@ function translate_org($org)
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ" crossorigin="anonymous">
     <title>Domain Inspector</title>
-    <!--
+
     <style>
         @font-face {
-        font-family: 'Lato';
-        font-style: normal;
-        font-weight: 400;
-        src: local('Lato Regular'), local('Lato-Regular'), url(https://fonts.gstatic.com/s/lato/v11/7aC-Y4V2UPHQp-tqeekgkA.woff2) format('woff2');
-        src: local('Lato Regular'), local('Lato-Regular'), url(https://fonts.gstatic.com/s/lato/v11/9k-RPmcnxYEPm8CNFsH2gg.woff) format('woff');
-        /*src: local('Lato Regular'), local('Lato-Regular'), url('../font/Lato-Regular.woff') format('woff');*/
-        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215, U+E0FF, U+EFFD, U+F000;
+            font-family: 'Lato';
+            font-style: normal;
+            font-weight: 400;
+            src: local('Lato Regular'), local('Lato-Regular'), url(https://fonts.gstatic.com/s/lato/v11/7aC-Y4V2UPHQp-tqeekgkA.woff2) format('woff2');
+            src: local('Lato Regular'), local('Lato-Regular'), url(https://fonts.gstatic.com/s/lato/v11/9k-RPmcnxYEPm8CNFsH2gg.woff) format('woff');
+            /*src: local('Lato Regular'), local('Lato-Regular'), url('../font/Lato-Regular.woff') format('woff');*/
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215, U+E0FF, U+EFFD, U+F000;
         }
 
-        /* Gridly */
-        .row {
-        display: flex
-        }
-
-        .col {
-        flex: 1
-        }
-
-        @media(max-width:48em) {
-        .row {
-        flex-direction: column
-        }
-
-        .col {
-        flex: 0 0 auto
-        }
-        }
-
-        @media(min-width:48em) {
-        .col-tenth {
-        flex: 0 0 10%
-        }
-
-        .col-fifth {
-        flex: 0 0 20%
-        }
-
-        .col-quarter {
-        flex: 0 0 25%
-        }
-
-        .col-third {
-        flex: 0 0 33.3333334%
-        }
-
-        .col-half {
-        flex: 0 0 50%
-        }
-        }
-
-        *,
-        *:after,
-        *:before {
-        box-sizing: border-box;
-        border: 0 solid #e5e7eb;
-        }
-
-        html {
-        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-        font-variation-settings: normal;
-        }
-
-        /* Default to dark theme */
-        html {
-        --text-color-normal: hsl(210, 10%, 66%);
-        --text-color-normal-disabled: hsla(210, 10%, 66%, 50%);
-        --text-color-light: hsl(210, 90%, 90%);
-        --text-color-richer: hsl(210, 50%, 62%);
-        --text-color-richer-see-through: hsl(210, 50%, 62%, 33%);
-        --text-color-richer-half-see-through: hsl(210, 50%, 62%, 60%);
-        --text-color-highlight: hsl(25, 75%, 50%);
-        --text-color-highlight-light: hsla(25, 70%, 45%, 0.507);
-
-        --link-color: hsl(210, 80%, 55%);
-        --bright-color: hsl(25, 70%, 60%);
-        --error-color: rgb(240, 50, 50);
-
-        --button-background: hsl(210, 63%, 43%);
-        --button-background-error: hsl(13, 61%, 50%);
-        --button-background-error-highlight: var(--text-color-light);
-        --button-text: black;
-        --beta-button-background: var(--text-color-light);
-
-        --background: hsl(210, 20%, 12%);
-        --list-row-odd-background: hsl(210, 20%, 9%);
-        --highlight-background: hsl(210, 22%, 16%);
-        --popup-background: black;
-
-        --banner-button-background: var(--highlight-background);
-        --banner-button-background-hover: hsl(0, 0%, 83%);
-        --banner-button-border: var(--banner-button-background);
-
-        --input-text: var(--text-color-normal);
-        --input-background: var(--background);
-        --input-border: var(--text-color-normal);
-
-        --popup-menu-selected-background: hsl(210, 29%, 28%);
-
-        --header-gradient-start: black;
-        --header-gradient-end: var(--background);
-
-        --header-logo-color: hsl(210, 90%, 70%);
-        --avatar-logo-color: hsl(210, 63%, 43%);
-
-        --disabled-opacity: 0.3;
-        }
-
-        html[data-theme='light'] {
-        /* Normal text color. */
-        --text-color-normal: hsl(216, 77%, 17%);
-        --text-color-normal-disabled: hsla(216, 77%, 17%, 50%);
-        /* Lighter, less prominent variant. */
-        --text-color-light: hsl(216, 70%, 50%);
-        /* Slightly richer text color, used for headlines, etc. */
-        --text-color-richer: hsl(216, 77%, 25%);
-        --text-color-richer-see-through: hsla(216, 77%, 25%, 33%);
-        --text-color-richer-half-see-through: hsla(216, 77%, 25%, 60%);
-        /* Much more rich accent color for text. [Orange] */
-        --text-color-highlight: hsl(12, 74%, 50%);
-        --text-color-highlight-light: hsla(12, 74%, 50%, 0.507);
-
-        /* Color for links. */
-        --link-color: hsl(200, 100%, 42%);
-        /* Accent color for UI elements (mostly hover text). [Orange] */
-        --bright-color: hsl(12, 82%, 60%);
-        /* Color for error states. [Red] */
-        --error-color: red;
-
-        /* Button background and text colors. */
-        --button-background: var(--text-color-richer);
-        --button-background-error: hsl(13, 61%, 50%);
-        --button-background-error-highlight: var(--text-color-light);
-        --button-text: white;
-
-        /* Normal background. */
-        --background: hsl(203, 36%, 95%);
-        /* Alternating lists rows. */
-        --list-row-even-background: var(--background);
-        --list-row-odd-background: #f9faff;
-        /* Darker background, e.g. for code blocks etc. */
-        --highlight-background: #d7dfe7;
-        /* Background for pop-ups. */
-        --popup-background: white;
-
-        --banner-button-background: var(--highlight-background);
-        --banner-button-background-hover: hsl(212, 72%, 59%);
-        --banner-button-border: var(--banner-button-background);
-
-        /* Input background and text colors */
-        --input-text: var(--text-color-normal);
-        --input-background: var(--background);
-        --input-border: var(--text-color-richer);
-
-        /* Shadow for pop-ups. */
-        --shadow: 0 0.5rem 10px rgba(0, 0, 0, 0.3);
-
-        /* Colors for text and selected lines for menus (e.g. search completions) */
-        --popup-menu-text-color: var(--text-color-normal);
-        --popup-menu-selected-background: #ced5df;
-        /* Slightly darker than --highlight-background. */
-
-        /* Gradient for the top window header. */
-        --header-gradient-start: hsl(216, 100%, 29%);
-        --header-gradient-end: hsl(216, 76%, 39%);
-
-        /*Header logo*/
-        --header-logo-color: hsl(203, 36%, 87%);
-        --avatar-logo-color: hsl(216, 77%, 17%);
-
-        --disabled-opacity: 0.3;
-        }
-
-        html[data-theme='high-contrast'] {
-        --text-color-normal: white;
-        --text-color-light: white;
-        --text-color-richer: white;
-        --text-color-richer-see-through: white;
-        --text-color-richer-half-see-through: white;
-        --text-color-highlight: white;
-        --text-color-highlight-light: white;
-
-        --link-color: white;
-        --bright-color: white;
-        --error-color: white;
-
-        --button-background: white;
-        --button-background-error: white;
-        --button-background-error-highlight: white;
-        --button-text: black;
-
-        --background: black;
-        --list-row-odd-background: black;
-        --highlight-background: black;
-        --popup-background: black;
-
-        --banner-button-background: black;
-        --banner-button-background-hover: white;
-        --banner-button-border: white;
-
-        --shadow: 0 0 5px white, 0 0 5px white;
-
-        --popup-menu-text-color: black;
-        --popup-menu-selected-background: white;
-
-        --header-gradient-start: black;
-        --header-gradient-end: black;
-
-        --header-logo-color: white;
-        --avatar-logo-color: black;
-
-        --disabled-opacity: 0;
-        }
-
-        html.color-theme-in-transition,
-        html.color-theme-in-transition *,
-        html.color-theme-in-transition *:before,
-        html.color-theme-in-transition *:after {
-        transition: all 750ms !important;
-        transition-delay: 0 !important;
-        }
-
-        html,
-        body {
-        height: 100%;
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        }
-
-        body {
-        font-family: 'Lato', Helvetica, Arial, sans-serif;
-        text-rendering: optimizeLegibility;
-        background-color: rgb(15 23 42/1);
-        color: rgb(148 163 184/1);
-        padding-bottom: 2rem;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        }
-
-        main {
-        width: 100%;
-        /*height: 100%;*/
-        max-width: 1170px;
-        flex: 1;
-        }
-
-        code,
-        pre {
-        font-family: Menlo, Consolas, Monaco, monospace;
-        /*font-family: "PT Mono", monospace;*/
-        font-size: .8rem;
-        line-height: 1.26rem;
-        margin: 0;
-        /*color:#5f5f5f;*/
-        }
-
-        pre {
-        background-color: var(--highlight-background);
-        /*#f9f9f9;*/
-        border: 1px solid #333;
-        margin-top: 1rem;
-        padding: 1rem;
-        -moz-tab-size: 4;
-        tab-size: 4;
-        overflow-x: auto;
-        border-radius: 3px;
-        color: var(--text-color-highlight);
-        /*#333;*/
-        }
-
-        h1 {
-        font-size: 1.728rem;
-        line-height: 1.4;
-        margin-top: 2.1rem;
-        font-weight: 700;
-        }
-
-        @media all and (min-width: 640px) {
-        h1 {
-        font-size: 2.0736rem;
-        }
-        }
-
-        h2 {
-        font-size: 1.44rem;
-        line-height: 1.35;
-        margin-top: 1.5rem;
-        margin-bottom: 0;
-        font-weight: 700;
-        border-bottom: 1px solid #ddd;
-        }
-
-        h3,
-        h4 {
-        font-size: 1.2rem;
-        line-height: 1.3;
-        }
-
-        h3,
-        h4,
-        h6 {
-        font-weight: 500;
-        }
-
-        h3 {
-        font-weight: 700;
-        text-decoration: underline;
-        }
-
-        h6 {
-        font-size: .69444rem;
-        line-height: 1.4rem;
-        margin-top: .7rem;
-        /*color: #aaa;*/
-        font-style: italic;
-        }
-
-        h4 {
-        text-align: center;
-        text-transform: capitalize;
-        }
-
-        p {
-        color: #dedede;
-        font-family: Helvetica, Arial, sans-serif;
-        font-size: 1rem;
-        }
-
-        a {
-        text-decoration: none;
-        color: var(--link-color);
-        /*#0076B8;*/
-        transition: opacity 1s linear;
-        opacity: 1;
-        outline: medium none;
-        }
-
-        a.disabled {
-        cursor: default;
-        opacity: 0.5;
-        }
-
-        table {
-        margin-top: 0.5rem;
-        border-spacing: 0;
-        border-collapse: collapse;
-        width: 100%;
-        }
-
-        table th {
-        max-width: 200px;
-        }
-
-        table th,
-        table td {
-        vertical-align: top;
-        text-align: left;
-        }
-
-        .search-bar {
-        /* padding-top: 1rem; */
-        background-color: #1e293b;
-        /* padding-bottom: 1rem; */
-        margin-bottom: 1rem;
-        border-bottom: 1px solid #e2e8f00d;
-        display: flex;
-        align-content: center;
-        justify-content: center;
-        width: 100%;
-        }
-
-        .search-bar form {
-        width: 100%;
-        max-width: 1170px;
-        display: flex;
-        align-items: center;
-        flex: 1 1 auto;
-        }
-
-        input::placeholder,
-        textarea::placeholder {
-        color: #9ca3af;
-        }
-
-        .search-bar input {
-        display: flex;
-        flex: 1;
-        margin-right: 0.3rem;
-
-        height: 3.5rem;
-        margin-left: .75rem;
-        margin-right: 1rem;
-        font-size: .875rem;
-        line-height: 1.42857143;
-        color: rgb(226 232 240);
-        background: #0000;
-        font-weight: 400;
-
-        background-image: none;
-        }
-
-        .search-bar input:focus {
-        outline: 2px dotted #0000;
-        }
-
-        .search-bar label {
-        height: 1.5rem;
-        width: 1.5rem;
-        flex: none;
-        }
-
-        .search-bar button {
-        padding-top: .25rem;
-        padding-bottom: .25rem;
-        padding-left: .75rem;
-        padding-right: .75rem;
-        background-color: #38bdf81a;
-        border-radius: 9999px;
-        font-weight: 600;
-        color: rgb(56 189 248/1);
-        line-height: 1.25rem;
-        font-size: .75rem;
-        }
-
-        /* .records {} */
-
-        .records td,
-        .records th,
-        .records__col {
-        padding: 0.3rem 0.7rem;
-        }
-
-        /* .records tr:nth-child(odd),
-        .records__row:nth-child(odd) {
-        background: #CCC;
+        /* @font-face {
+            font-family: 'Menlo Regular';
+            font-style: normal;
+            font-weight: normal;
+            src: local('Menlo Regular'), url('fonts/Menlo-Regular.woff') format('woff');
         } */
 
-        .records tr:nth-child(even),
-        .records__row:nth-child(even) {
-        background: rgba(255, 255, 255, 0.075);
+        body {
+            font-family: 'Lato', Helvetica, Arial, sans-serif;
+            text-rendering: optimizeLegibility;
         }
 
-        .records td code {
-        line-break: anywhere;
+        code.test,
+        pre.test {
+            font-family: 'Menlo Regular', Consolas, Monaco, monospace;
+            /*font-family: "PT Mono", monospace;*/
+            tab-size: 4;
         }
 
-        .values-list tr:nth-child(even) td {
-        background: rgba(255, 255, 255, 0.075);
-        }
-
-        /* Tabs */
-        .tabs {
-        margin-bottom: 20px;
-        padding-left: 0px;
-        border-bottom: 1px solid #D8D8D8;
-        }
-
-        .tabs__tab {
-        display: inline-block;
-        padding-left: 3px;
-        padding-right: 3px;
-        margin-right: 30px;
-        color: #dedede;
-        font-family: "Lato";
-        font-size: 15px;
-        cursor: pointer;
-        }
-
-        .tabs__tab--active {
-        font-family: "Lato";
-        font-size: 15px;
-        color: #0076b8;
-        font-weight: bold;
-        padding-bottom: 12px;
-        border-bottom: 3px solid;
-        }
-
-        .tab-content {
-        display: none;
-        padding-bottom: 3rem;
-        }
-
-        .tab-content--active {
-        display: block;
-        }
-
-        .google-map {
-        width: 100%;
-        height: 400px;
-        }
-
-        .google-map--tall {
-        height: 700px;
-        }
-
-        .gm-style .gm-style-iw {
-        color: #333;
-        }
-
-        .gm-style .gm-style-iw strong {
-        font-weight: 700;
-        }
-
-        .error {
-        color: red;
-        }
-
-
-    </style>
-    -->
-    <style>
         :root,
         [data-bs-theme="light"] {
             --bd-purple: #4c0bce;
@@ -2143,7 +1758,9 @@ function translate_org($org)
             /* background-color: transparent; */
             box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15), inset 0 -1px 0 rgba(255, 255, 255, 0.15);
             /* background-color: #1e293b; */
-            background-color: linear-gradient(rgba(var(--bd-violet-rgb), 1), rgba(var(--bd-violet-rgb), 0.95));
+            /* background-image: linear-gradient(rgba(var(--bd-violet-rgb), 1), rgba(var(--bd-violet-rgb), 0.95)); */
+            background-image: linear-gradient(90deg, rgba(33, 62, 111, 1) 0%, rgba(33, 62, 111, 0.95) 100%);
+            ;
         }
 
         .records td code {
@@ -2259,74 +1876,6 @@ function translate_org($org)
         .spf-pass {
             color: #48ec61 !important;
         }
-
-        /**
-        * Tooltip Styles
-        */
-        /*
-        /* Add this attribute to the element that needs a tooltip /
-        [data-bs-toggle="tooltip" data-bs-title] {
-            position: relative;
-            z-index: 2;
-            cursor: pointer;
-        }
-
-        /* Hide the tooltip content by default /
-        [data-bs-toggle="tooltip" data-bs-title]:before,
-        [data-bs-toggle="tooltip" data-bs-title]:after {
-            visibility: hidden;
-            -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=0)";
-            filter: progid: DXImageTransform.Microsoft.Alpha(Opacity=0);
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        /* Position tooltip above the element /
-        [data-bs-toggle="tooltip" data-bs-title]:before {
-            position: absolute;
-            bottom: 150%;
-            left: 50%;
-            margin-bottom: 5px;
-            margin-left: -80px;
-            padding: 7px;
-            min-width: 160px;
-            -webkit-border-radius: 3px;
-            -moz-border-radius: 3px;
-            border-radius: 3px;
-            background-color: #000;
-            background-color: hsla(0, 0%, 20%, 0.9);
-            color: #fff;
-            content: attr(data-bs-toggle="tooltip" data-bs-title);
-            text-align: center;
-            font-size: 14px;
-            line-height: 1.2;
-            white-space: pre;
-        }
-
-        /* Triangle hack to make tooltip look like a speech bubble /
-        [data-bs-toggle="tooltip" data-bs-title]:after {
-            position: absolute;
-            bottom: 150%;
-            left: 50%;
-            margin-left: -5px;
-            width: 0;
-            border-top: 5px solid #000;
-            border-top: 5px solid hsla(0, 0%, 20%, 0.9);
-            border-right: 5px solid transparent;
-            border-left: 5px solid transparent;
-            content: " ";
-            font-size: 0;
-            line-height: 0;
-        }
-
-        /* Show tooltip content on hover /
-        [data-bs-toggle="tooltip" data-bs-title]:hover:before,
-        [data-bs-toggle="tooltip" data-bs-title]:hover:after {
-            visibility: visible;
-            -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=100)";
-            filter: progid: DXImageTransform.Microsoft.Alpha(Opacity=100);
-            opacity: 1;
-        } */
 
         .google-map {
             width: 100%;
@@ -2744,8 +2293,8 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Start of [a zone of] authority"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Primary nameserver"><?php echo $record['mname']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Hostmaster E-mail address"><?php echo $record['rname']; ?></td>
@@ -2785,8 +2334,8 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Namer Server"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo ($ip_info ? $ip_info->org : ''); ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
                                 </tr>
@@ -2794,15 +2343,6 @@ function translate_org($org)
                             }
                             if (count($dns_records['ns']) > 0) $zoneExportRaw .= "\n";
 
-                            /*
-							array(5) {
-							  ["host"]=> "smartmgmt.com"
-							  ["class"]=> "IN"
-							  ["ttl"]=> int(3095)
-							  ["type"]=>  "A"
-							  ["ip"]=> "72.52.145.252"
-							}
-							*/
                             if (count($dns_records['a']) > 0) $zoneExportRaw .= "; A Record\n";
                             foreach ($dns_records['a'] as $record) {
                                 $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['ip']}\n";
@@ -2822,8 +2362,8 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host'] . $cname; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Address"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $record['host']; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $ip; ?></td>
                                 </tr>
@@ -2840,8 +2380,8 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="IPv6 Address"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $record['host']; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $ip; ?></td>
                                 </tr>
@@ -2849,15 +2389,6 @@ function translate_org($org)
                             }
                             if (count($dns_records['aaaa']) > 0) $zoneExportRaw .= "\n";
 
-                            /*
-							 array(5) {
-								'host' => string(14) "www.cweiske.de"
-								'class' => string(2) "IN"
-								'ttl' => int(86400)
-								'type' => string(5) "CNAME"
-								'target' => string(10) "cweiske.de"
-							  }
-							*/
                             if (count($dns_records['cname']) > 0) $zoneExportRaw .= "; CNAME Record\n";
                             foreach ($dns_records['cname'] as $record) {
                                 $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['target']}.\n";
@@ -2867,14 +2398,216 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Canonical Name"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
                                 </tr>
                             <?php
                             }
                             if (count($dns_records['cname']) > 0) $zoneExportRaw .= "\n";
+
+                            if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "; DNSKEY Record\n";
+                            foreach ($dns_records['dnskey'] as $record) {
+                                // flags, protocol, algorithm, key
+                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['flags']}\t{$record['protocol']}\t{$record['algorithm']}\t{$record['key']}\n";
+
+                                // Flags lookup
+                                $flags_label = '';
+                                // If bit 7 has value 1, then the DNSKEY record holds a DNS zone key
+                                if (intval($record['flags']) & (1 << 8)) {
+                                    $flags_label .= "Holds DNS Zone Key: True - ";
+                                } else {
+                                    $flags_label .= "Holds DNS Zone Key: False - ";
+                                }
+                                // If bit 15 has value 1, then the DNSKEY record holds a key intended for use as a secure entry point.
+                                if (intval($record['flags']) & 1) {
+                                    $flags_label .= 'Secure Entry Point: True';
+                                } else {
+                                    $flags_label .= 'Secure Entry Point: False';
+                                }
+
+                                // Algorithm lookup
+                                $algo_label = '?';
+                                switch ($record['algorithm']) {
+                                    case 1:
+                                        $algo_label = "RSA/MD5";
+                                        break;
+                                    case 2:
+                                        $algo_label = "Diffie-Hellman";
+                                        break;
+                                    case 3:
+                                        $algo_label = "DSA/SHA-1";
+                                        break;
+                                    case 4:
+                                        $algo_label = "Elliptic Curve";
+                                        break;
+                                    case 5:
+                                        $algo_label = "RSA/SHA-1";
+                                        break;
+                                    case 6:
+                                        $algo_label = "DSA-NSEC3-SHA1";
+                                        break;
+                                    case 7:
+                                        $algo_label = "RSASHA1-NSEC3-SHA1";
+                                        break;
+                                    case 8:
+                                        $algo_label = "RSA/SHA-256";
+                                        break;
+                                    case 10:
+                                        $algo_label = "RSA/SHA-512";
+                                        break;
+                                    case 12:
+                                        $algo_label = "GOST R 34.10-2001";
+                                        break;
+                                    case 13:
+                                        $algo_label = "ECDSA/SHA-256";
+                                        break;
+                                    case 14:
+                                        $algo_label = "ECDSA/SHA-384";
+                                        break;
+                                    case 15:
+                                        $algo_label = "Ed25519";
+                                        break;
+                                    case 16:
+                                        $algo_label = "Ed448";
+                                        break;
+                                    case 252:
+                                        $algo_label = "Indirect";
+                                        break;
+                                    case 253:
+                                        $algo_label = "Private";
+                                        break;
+                                    case 254:
+                                        $algo_label = "Private OID";
+                                        break;
+                                }
+                            ?>
+                                <tr>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="DNS Key"><?php echo $record['type']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Flags - <?= $flags_label ?>"><?php echo $record['flags']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Protocol"><?php echo $record['protocol']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Algorithm - <?= $algo_label ?>"><?php echo $record['algorithm']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Public Key" colspan="4"><code><?php echo $record['key']; ?></code></td>
+                                </tr>
+                            <?php
+                            }
+                            if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "\n";
+
+                            if (count($dns_records['ds']) > 0) $zoneExportRaw .= "; DS Record\n";
+                            foreach ($dns_records['ds'] as $record) {
+                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['keytag']}\t{$record['algorithm']}\t{$record['digesttype']}\t{$record['digest']}\n";
+
+                                // DS records are reported by the parent zone
+                                $lookup_host = count($tld_nameservers_hosts) ? $tld_nameservers_hosts[0]['host'] : '?';
+                                $lookup = " <abbr title='Report by'>&rarr; {$lookup_host}</abbr>";
+
+                                // Algorithm lookup
+                                $algo_label = '?';
+                                switch ($record['algorithm']) {
+                                    case 1:
+                                        $algo_label = "RSA/MD5";
+                                        break;
+                                    case 2:
+                                        $algo_label = "Diffie-Hellman";
+                                        break;
+                                    case 3:
+                                        $algo_label = "DSA/SHA-1";
+                                        break;
+                                    case 4:
+                                        $algo_label = "Elliptic Curve";
+                                        break;
+                                    case 5:
+                                        $algo_label = "RSA/SHA-1";
+                                        break;
+                                    case 6:
+                                        $algo_label = "DSA-NSEC3-SHA1";
+                                        break;
+                                    case 7:
+                                        $algo_label = "RSASHA1-NSEC3-SHA1";
+                                        break;
+                                    case 8:
+                                        $algo_label = "RSA/SHA-256";
+                                        break;
+                                    case 10:
+                                        $algo_label = "RSA/SHA-512";
+                                        break;
+                                    case 12:
+                                        $algo_label = "GOST R 34.10-2001";
+                                        break;
+                                    case 13:
+                                        $algo_label = "ECDSA/SHA-256";
+                                        break;
+                                    case 14:
+                                        $algo_label = "ECDSA/SHA-384";
+                                        break;
+                                    case 15:
+                                        $algo_label = "Ed25519";
+                                        break;
+                                    case 16:
+                                        $algo_label = "Ed448";
+                                        break;
+                                    case 252:
+                                        $algo_label = "Indirect";
+                                        break;
+                                    case 253:
+                                        $algo_label = "Private";
+                                        break;
+                                    case 254:
+                                        $algo_label = "Private OID";
+                                        break;
+                                }
+
+                                // Digest lookup
+                                $digest_label = '?';
+                                switch ($record['digesttype']) {
+                                    case 1:
+                                        $digest_label = "SHA-1";
+                                        break;
+                                    case 2:
+                                        $digest_label = "SHA-256";
+                                        break;
+                                    case 3:
+                                        $digest_label = "GOST R 34.10-2001";
+                                        break;
+                                    case 4:
+                                        $digest_label = "SHA-384";
+                                        break;
+                                }
+                            ?>
+                                <tr>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host'] . $lookup; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Delegation Signer"><?php echo $record['type']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Key Tag"><?php echo $record['keytag']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Algorithm - <?= $algo_label ?>"><?php echo $record['algorithm']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Digest Type - <?= $digest_label ?>"><?php echo $record['digesttype']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Digest" colspan="4"><code><?php echo $record['digest']; ?></code></td>
+                                </tr>
+                            <?php
+                            }
+                            if (count($dns_records['ds']) > 0) $zoneExportRaw .= "\n";
+
+                            if (count($dns_records['caa']) > 0) $zoneExportRaw .= "; CAA Record\n";
+                            foreach ($dns_records['caa'] as $record) {
+                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['flags']}\t{$record['tag']}\t\"{$record['value']}\"\n";
+                            ?>
+                                <tr>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Certification Authority Authorization"><?php echo $record['type']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Flags"><?php echo $record['flags']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Tag"><?php echo $record['tag']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="5"><code><?php echo $record['value']; ?></code></td>
+                                </tr>
+                            <?php
+                            }
+                            if (count($dns_records['caa']) > 0) $zoneExportRaw .= "\n";
 
                             if (count($dns_records['mx']) > 0) $zoneExportRaw .= "; MX Record\n";
                             foreach ($dns_records['mx'] as $record) {
@@ -2892,8 +2625,8 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Mail Exchange"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Priority"><?php echo $record['pri']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="6"><?php echo $record['target']; ?></td>
@@ -2912,8 +2645,8 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?= $record['host'] . $cname ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Text"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><code><?php echo htmlspecialchars($record['txt']); ?></code></td>
                                 </tr>
@@ -2927,8 +2660,8 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Text"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><code><?php echo $record['txt']; ?></code></td>
                                 </tr>
@@ -2940,8 +2673,8 @@ function translate_org($org)
 								?>
 								<tr>
 									<td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-									<td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
 									<td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time( $record['ttl'] ); ?>"><?php echo $record['ttl']; ?></td>
+									<td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
 									<td data-bs-toggle="tooltip" data-bs-title="Host Information"><?php echo $record['type']; ?></td>
 									<td data-bs-toggle="tooltip" data-bs-title="Hardware"><?php echo $record['hardware']; ?></td>
 									<td data-bs-toggle="tooltip" data-bs-title="OS" colspan="6"><?php echo $record['os']; ?></td>
@@ -2957,8 +2690,8 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Service Location"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Priority"><?php echo $record['pri']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Weight"><?php echo $record['weight']; ?></td>
@@ -2972,13 +2705,15 @@ function translate_org($org)
                             if (count($dns_records['ptr']) > 0) $zoneExportRaw .= "; PTR Record\n";
                             foreach ($dns_records['ptr'] as $record) {
                                 $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['txt']}\n";
+
+                                $rdns = " <abbr title='Reverse DNS'>&rarr; {$record['host']}</abbr>";
                             ?>
                                 <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $domain . $rdns; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Pointer"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><?php echo $record['txt']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Target" colspan="7"><?php echo $record['target']; ?></td>
                                 </tr>
                             <?php
                             }
@@ -2990,14 +2725,14 @@ function translate_org($org)
                             ?>
                                 <tr>
                                     <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Naming Authority Pointer"><?php echo $record['type']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Order"><?php echo $record['order']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Preference"><?php echo $record['pref']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Flags"><?php echo $record['flags']; ?></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Service"><?php echo $record['services']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Regexp"><?php echo $record['regex']; ?></td>
+                                    <td data-bs-toggle="tooltip" data-bs-title="Regexp"><code><?php echo $record['regex']; ?></code></td>
                                     <td data-bs-toggle="tooltip" data-bs-title="Replacement"><?php echo $record['replacement']; ?></td>
                                 </tr>
                             <?php
@@ -3005,7 +2740,7 @@ function translate_org($org)
                             if (count($dns_records['naptr']) > 0) $zoneExportRaw .= "\n";
                             ?>
                         </table>
-                        <button class="btn btn-primary download-dns">Download Zone File</button>
+                        <button class="btn btn-primary download-dns"><i class="bi bi-download"></i>&nbsp;Download Zone File</button>
                     </div>
                 </div>
             </section>

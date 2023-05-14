@@ -1,5 +1,6 @@
 {
     "require": {
-        "pear/net_dns2": "^1.5"
+        "pear/net_dns2": "^1.5",
+        "vlucas/phpdotenv": "^5.5"
     }
 }
