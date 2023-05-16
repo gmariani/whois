@@ -52,7 +52,7 @@ function get_host_by_name($domain)
             return false;
         }
 
-        $ip_cache[$domain] = gethostbyname($domain);
+        $ip_cache[$domain] = $result;
         $host_cache[$ip_cache[$domain]] = $domain;
         $dns_count++;
     }
@@ -125,6 +125,8 @@ function get_dns_record($host, $type)
         // Save some time if we're only doing a rDNS
         // error_log($host . ' ' . $type_string);
         if ((str_ends_with($host, '.in-addr.arpa') || str_ends_with($host, '.ip6.arpa')) && $type !== DNS_PTR) {
+            $result = false;
+        } else if ($host === '' || $host === false) {
             $result = false;
         } else {
             try {
@@ -246,8 +248,9 @@ function get_dns_record($host, $type)
                 // Skip
                 $error_message = $e->getMessage();
                 if (!str_contains($error_message, 'The domain name referenced in the query does not exist')) {
-                    error_log("::query() failed: " . $error_message);
-                    error_log(print_r($rr, true));
+                    error_log("get_dns_record()1: " . $host . ', ' . $type_string);
+                    error_log("get_dns_record()2: " . $error_message);
+                    // error_log(print_r($e, true));
                 }
                 // $result = dns_get_record($host, $type);
                 $result = false;
@@ -699,23 +702,11 @@ function has_ssl($domain)
         $cont = stream_context_get_params($socket);
         $cert_resource = $cont['options']['ssl']['peer_certificate'];
         return $cert_resource;
-
-        // Expected name has format "/CN=*.yourdomain.com"
-        // $namepart = explode( '=', $cert['name'] );
-
-        // We want to correctly confirm the certificate even
-        // for subdomains like "www.yourdomain.com"
-        /* if ( count( $namepart ) == 2 ) {
-            $cert_domain = trim( $namepart[1], '*. ' );
-            $check_domain = substr( $domain, -strlen( $cert_domain ) );
-            $res = ($cert_domain == $check_domain);
-        }*/
-    } else {
-        // No SSL
-        error_log("has_ssl({$domain}) error {$error_code}");
-        error_log(print_r($error_message, true));
     }
 
+    // No SSL
+    // error_log("has_ssl()1: Error {$domain}, code {$error_code}");
+    // error_log("has_ssl()2: " . print_r($error_message, true));
     return false;
 }
 
@@ -882,7 +873,7 @@ function geo_lookup_ip_api($ip)
     curl_close($ch);
 
     if (intval($http_code, 10) === 429) {
-        error_log("GeoLocate: ip-api.com Rate Limit " . print_r($body, true));
+        error_log("geo_lookup_ip_api(): Rate Limit " . print_r($body, true));
         return false;
     }
 
@@ -892,7 +883,7 @@ function geo_lookup_ip_api($ip)
 		var_dump($body);
 		echo '</pre>';*/
         // $errors[] = "GeoLocate: Error<br><pre>" . print_r($body, true) . '</pre>';
-        if (!empty($body)) error_log("GeoLocate: ip-api.com Error - " . print_r($body, true));
+        if (!empty($body)) error_log("geo_lookup_ip_api(): Error - " . print_r($body, true));
         return false;
     }
 
@@ -926,7 +917,7 @@ function geo_lookup_ipinfo($ip)
     curl_close($ch);
 
     if (intval($http_code, 10) === 429) {
-        error_log("GeoLocate: ipinfo.io Rate Limit " . print_r($body, true));
+        error_log("geo_lookup_ipinfo(): Rate Limit " . print_r($body, true));
         return false;
     }
 
@@ -961,13 +952,13 @@ function geo_lookup_keycdn($ip)
     curl_close($ch);
 
     if (intval($http_code, 10) === 429) {
-        error_log("GeoLocate: keycdn.com Rate Limit " . print_r($body, true));
+        error_log("geo_lookup_keycdn(): Rate Limit " . print_r($body, true));
         return false;
     }
 
     $json_result = json_decode($body);
     if ($json_result->status !== 'success') {
-        if (!empty($result)) error_log("GeoLocate: keycdn.com Error - " . print_r($result, true));
+        if (!empty($result)) error_log("geo_lookup_keycdn(): Error - " . print_r($result, true));
         return false;
     }
 
@@ -1233,6 +1224,8 @@ function seconds_to_time($seconds)
 
 function get_nameservers_ip($host)
 {
+    if (false === $host) return [];
+
     $response = dns_get_record($host, DNS_NS);
     if (count($response)) {
         return array_map(function ($record) {
@@ -1342,7 +1335,7 @@ if (count($nameservers) <= 0) {
 }
 
 // For PTR lookup
-$arpa_host = implode('.', array_reverse(explode('.', $ip))) . ".in-addr.arpa";
+$arpa_host = $ip ? implode('.', array_reverse(explode('.', $ip))) . ".in-addr.arpa" : false;
 // error_log($arpa_host);
 $arpa_nameservers_hosts = get_nameservers_ip($arpa_host);
 $arpa_nameservers = array_map(function ($ns) {
@@ -1764,10 +1757,42 @@ function translate_org($org)
             }
         } */
 
-        .bd-content dl>dt,
+        /* .bd-content dl>dt, */
         .bd-content>.table th,
         .bd-content>.table-responsive .table th {
             color: var(--bs-emphasis-color);
+        }
+
+        .bd-content dl>dt {
+            text-align: end;
+            font-weight: 600;
+            margin-inline-end: 0;
+        }
+
+        .bd-content dl>dd {
+            color: rgb(251, 251, 254);
+            margin-bottom: .25rem;
+        }
+
+        .bd-group {
+            padding: 1.75em 30px;
+            border-top: 1px solid rgba(249, 249, 250, 0.2);
+        }
+
+        .bd-group-title {
+            border-bottom: 2px solid white;
+            padding-bottom: 8px;
+            margin-bottom: 0;
+            display: inline-block;
+        }
+
+        .bg-group-section-title {
+            text-align: end;
+            font-weight: 700;
+            color: rgb(251, 251, 254);
+            font-size: 1em;
+            vertical-align: middle;
+            transform: translateX(-5px);
         }
 
         .bd-navbar {
@@ -1897,6 +1922,8 @@ function translate_org($org)
         .google-map {
             width: 100%;
             height: 400px;
+            border-radius: 5px;
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
         }
 
         .google-map--tall {
@@ -1977,273 +2004,279 @@ function translate_org($org)
 
 
                         ?>
-                        <h2 class="display-5">General</h2>
-                        <dl class="row mb-5">
-                            <dt class="col-sm-3">Server IP</dt>
-                            <dd class="col-sm-9"><?= $ip ?></dd>
+                        <h2 class="display-5 bd-group-title">General</h2>
+                        <div class="bd-group row">
+                            <dl class="row">
+                                <dt class="col-sm-4">Server IP</dt>
+                                <dd class="col-sm-8"><?= $ip ?></dd>
 
-                            <dt class="col-sm-3">Server Location</dt>
-                            <dd class="col-sm-9"><?= get_location_address($location) ?></dd>
+                                <dt class="col-sm-4">Server Location</dt>
+                                <dd class="col-sm-8"><?= $ip === false ? 'Unknown' : get_location_address($location) ?></dd>
 
-                            <dt class="col-sm-3">Host</dt>
-                            <dd class="col-sm-9"><?= ($arin['customer_name'] ?? 'Unknown Customer Name') . ' (<a href="' . ($arin['customer_link'] ?? '#') . '" target="_blank">' . ($arin['customer_handle'] ?? 'Unknown Customer Handle') . '</a>)' ?></dd>
+                                <dt class="col-sm-4">Host</dt>
+                                <dd class="col-sm-8"><?= ($arin['customer_name'] ?? 'Unknown Customer Name') . ' (<a href="' . ($arin['customer_link'] ?? '#') . '" target="_blank">' . ($arin['customer_handle'] ?? 'Unknown Customer Handle') . '</a>)' ?></dd>
 
-                            <dt class="col-sm-3">Host Net Blocks</dt>
-                            <dd class="col-sm-9">
-                                <table>
-                                    <?php
-                                    // Trying to access array offset on value of type bool on line 1667
-                                    if (is_array($arin) === true) {
-                                        foreach ($arin['net_block'] as $key => $netblock) {
-                                            echo '<tr><td>' . $netblock['start_address'] . '-' . $netblock['end_address'] . '</td><td>(' . $netblock['start_address'] . '/' . $netblock['cidr_length'] . ')</td></tr>';
+                                <dt class="col-sm-4">Host Net Blocks</dt>
+                                <dd class="col-sm-8">
+                                    <table>
+                                        <?php
+                                        // Trying to access array offset on value of type bool on line 1667
+                                        if (is_array($arin) === true) {
+                                            foreach ($arin['net_block'] as $key => $netblock) {
+                                                echo '<tr><td>' . $netblock['start_address'] . '-' . $netblock['end_address'] . '</td><td>(' . $netblock['start_address'] . '/' . $netblock['cidr_length'] . ')</td></tr>';
+                                            }
                                         }
-                                    }
-                                    ?>
-                                </table>
-                            </dd>
+                                        ?>
+                                    </table>
+                                </dd>
 
-                            <dt class="col-sm-3">Domain Expiration Date</dt>
-                            <dd class="col-sm-9"><?= $domain_expiration . $domain_ttl ?></dd>
+                                <dt class="col-sm-4">Domain Expiration Date</dt>
+                                <dd class="col-sm-8"><?= $domain_expiration . $domain_ttl ?></dd>
 
-                            <dt class="col-sm-3">Domain Contact</dt>
-                            <dd class="col-sm-9"><?= $domain_data['contact'] ?></dd>
-                        </dl>
+                                <dt class="col-sm-4">Domain Contact</dt>
+                                <dd class="col-sm-8"><?= $domain_data['contact'] ?></dd>
+                            </dl>
+                        </div>
 
-                        <dl class="row mb-5">
-                            <dt class="col-sm-3">Domain Registrar</dt>
-                            <dd class="col-sm-9"><?= $domain_data['registrar'] ?></dd>
+                        <div class="bd-group row">
+                            <dl class="row">
+                                <dt class="col-sm-4">Domain Registrar</dt>
+                                <dd class="col-sm-8"><?= $domain_data['registrar'] ?></dd>
 
-                            <dt class="col-sm-3">Name Server Provider</dt>
-                            <dd class="col-sm-9"><?php
-                                                    $email_host = array();
-                                                    foreach ($dns_records['ns'] as $record) {
-                                                        $uri = strtolower($record['target']);
-                                                        // use unique index so we auto filter duplicates
-                                                        if (strpos($uri, 'cloudflare.com') !== false) {
-                                                            $email_host['cloudflare'] = 'Cloudflare';
-                                                        } elseif (strpos($uri, 'domaincontrol.com') !== false) {
-                                                            $email_host['GoDaddy'] = 'GoDaddy';
-                                                        } elseif (strpos($uri, 'bluehost.com') !== false) {
-                                                            $email_host['bluehost'] = 'BlueHost';
-                                                        } elseif (strpos($uri, 'hostgator.com') !== false) {
-                                                            $email_host['HostGator'] = 'HostGator';
-                                                        } elseif (strpos($uri, 'websitewelcome.com') !== false) {
-                                                            $email_host['HostGator'] = 'HostGator';
-                                                        } elseif (strpos($uri, 'microsoftonline.com') !== false) {
-                                                            $email_host['microsoft'] = 'Microsoft 365';
-                                                        } elseif (strpos($uri, 'theplanet.com') !== false) {
-                                                            $email_host['softlayer'] = 'SoftLayer';
-                                                        } elseif (strpos($uri, 'mediatemple.net') !== false) {
-                                                            $email_host['mediatemple'] = 'Media Temple';
-                                                        } elseif (strpos($uri, 'dnszone') !== false) {
-                                                            $email_host['coursevector'] = 'CourseVector';
-                                                        } elseif (strpos($uri, 'nexcess') !== false) {
-                                                            $email_host['nexcess'] = 'Nexcess (Liquid Web)';
-                                                        } elseif (strpos($uri, 'awsdns') !== false) {
-                                                            $email_host['amazon'] = 'AWS Route 53';
-                                                        } elseif (strpos($uri, 'registeredsite.com') !== false) {
-                                                            $email_host['netsol'] = 'Register.com';
-                                                        } elseif (strpos($uri, 'register.com') !== false) {
-                                                            $email_host['netsol'] = 'Register.com';
-                                                        } elseif (strpos($uri, 'worldnic') !== false) {
-                                                            $email_host['netsol'] = 'Network Solutions';
-                                                        } elseif (strpos($uri, 'wordpress.com') !== false) {
-                                                            $email_host['wordpress'] = 'WordPress.com';
-                                                        } elseif (strpos($uri, 'name-services.com') !== false) {
-                                                            $email_host['enom'] = 'eNom (Tucows)';
-                                                        } elseif (strpos($uri, 'hover.com') !== false) {
-                                                            $email_host['tucows'] = 'Tucows';
-                                                        } elseif (strpos($uri, 'ui-dns.') !== false) {
-                                                            $email_host['1and1'] = '1&1 Internet';
-                                                        } elseif (strpos($uri, 'digitalocean.com') !== false) {
-                                                            $email_host['digitalocean'] = 'DigitalOcean';
-                                                        } elseif (strpos($uri, '.azure-dns.') !== false) {
-                                                            $email_host['microsoft'] = 'Microsoft Azure';
-                                                        } elseif (strpos($uri, 'squarespacedns.com') !== false) {
-                                                            $email_host['squarespace'] = 'Squarespace';
-                                                        } elseif (strpos($uri, 'nsone.net') !== false) {
-                                                            $email_host['ns1'] = 'NS1.';
-                                                        } elseif (strpos($uri, 'sgvps.net') !== false) {
-                                                            $email_host['siteground'] = 'SiteGround';
-                                                        } elseif (strpos($uri, 'savvis.net') !== false) {
-                                                            $email_host['centurylink'] = 'CenturyLink Communications';
-                                                        } else {
-                                                            $email_host['Unknown/Host'] = 'Unknown/Host';
-                                                        }
-                                                    }
-                                                    echo implode(', ', $email_host);
-                                                    ?>
-                            </dd>
-
-                            <dt class="col-sm-3">Hosting Provider</dt>
-                            <dd class="col-sm-9"><?php
-                                                    foreach ($dns_records['a'] as $record) {
-                                                        $ip = $record['ip'];
-                                                        $ip_info = get_location($ip);
-                                                        echo $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
-                                                        break;
-                                                    }
-                                                    ?>
-                            </dd>
-
-                            <dt class="col-sm-3">Email Provider</dt>
-                            <dd class="col-sm-9"><?php
-                                                    $email_host = array();
-                                                    $email_target = null;
-                                                    $is_spam_filter = false;
-
-                                                    foreach ($dns_records['mx'] as $record) {
-                                                        $uri = strtolower($record['target']);
-                                                        $ip = get_host_by_name($record['target']);
-                                                        $email_target = $uri;
-
-
-                                                        // use unique index so we auto filter duplicates
-                                                        if (strpos($uri, 'mx25.net') !== false) {
-                                                            $email_host['PostLayer'] = 'PostLayer';
-                                                            $is_spam_filter = true;
-                                                        } elseif (strpos($uri, 'protection.outlook.com') !== false) {
-                                                            $email_host['Office365'] = 'Microsoft 365';
-                                                        } elseif (strpos($uri, 'mail.eo.outlook.com') !== false) {
-                                                            $email_host['Office365'] = 'Microsoft 365';
-                                                        } elseif (strpos($uri, 'googlemail.com') !== false) {
-                                                            $email_host['GMail'] = 'GMail';
-                                                        } elseif (strpos($uri, 'aspmx.l.google.com') !== false) {
-                                                            $email_host['GMail'] = 'GMail';
-                                                        } elseif (strpos($uri, 'emailsrvr.com') !== false) {
-                                                            $email_host['Rackspace'] = 'Rackspace Email Hosting';
-                                                        } elseif (strpos($uri, 'ess.barracudanetworks.com') !== false) {
-                                                            $email_host['Barracuda'] = 'Barracuda Essentials for Email Security';
-                                                            $is_spam_filter = true;
-                                                        } elseif (strpos($uri, 'hostedemail.com') !== false) {
-                                                            $email_host['OpenSRS'] = 'Tucows OpenSRS Hosted Email';
-                                                        } elseif (strpos($uri, 'secureserver.net') !== false) {
-                                                            $email_host['GoDaddy'] = 'GoDaddy';
-                                                        } elseif (strpos($uri, 'mailanyone.net') !== false) {
-                                                            $email_host['fusemail'] = 'FuseMail';
-                                                            $is_spam_filter = true;
-                                                        } elseif (strpos($uri, 'hes.trendmicro.com') !== false) {
-                                                            $email_host['trendmicro'] = 'TrendMicro Hosted Email Security';
-                                                            $is_spam_filter = true;
-                                                        } elseif (strpos($uri, 'ppe-hosted.com') !== false) {
-                                                            $email_host['proofpoint'] = 'Proofpoint Essentials';
-                                                            $is_spam_filter = true;
-                                                        } elseif (strpos($uri, 'comcast.net') !== false) {
-                                                            $email_host['comcast'] = 'Comcast';
-                                                        } elseif (strpos($uri, 'sourcedns') !== false) {
-                                                            $email_host['sourcedns'] = 'Liquid Web';
-                                                        } elseif (strpos($uri, 'netsolmail.net') !== false) {
-                                                            $email_host['netsol'] = 'Network Solutions Hosted Email';
-                                                        } elseif (strpos($uri, 'zoho.com') !== false) {
-                                                            $email_host['zoho'] = 'Zoho';
-                                                        } elseif (strpos($uri, '1and1.com') !== false) {
-                                                            $email_host['1and1'] = '1&1 Internet';
-                                                        } elseif (strpos($uri, 'mxthunder.') !== false) {
-                                                            $email_host['SpamHero'] = 'SpamHero';
-                                                            $is_spam_filter = true;
-                                                        } elseif (strpos($uri, 'hostingplatform.com') !== false) {
-                                                            $email_host['netsol'] = 'Network Solutions Hosted Email';
-                                                        } elseif (strpos($ip, '216.55') !== false) {
-                                                            // 216.55.101.xx
-                                                            // 216.55.102.xx
-                                                            // 216.55.103.xx
-                                                            $email_host['SpamWall'] = 'SpamWall';
-                                                            $is_spam_filter = true;
-                                                        } elseif (strpos($uri, 'reflexion.net') !== false) {
-                                                            $email_host['reflexion'] = 'Reflexion Email Security';
-                                                            $is_spam_filter = true;
-                                                        } elseif (strpos($uri, 'mailspamprotection.com') !== false) {
-                                                            $email_host['siteground'] = 'SiteGround';
-                                                            $is_spam_filter = true;
-                                                        } else {
-                                                            $email_host['Unknown/Self'] = 'Unknown/Self';
-                                                        }
-                                                    }
-
-                                                    echo implode(', ', $email_host);
-
-                                                    // If behind a mail filter, try to find the origin
-                                                    if ($is_spam_filter) {
+                                <dt class="col-sm-4">Name Server Provider</dt>
+                                <dd class="col-sm-8"><?php
                                                         $email_host = array();
+                                                        foreach ($dns_records['ns'] as $record) {
+                                                            $uri = strtolower($record['target']);
+                                                            // use unique index so we auto filter duplicates
+                                                            if (strpos($uri, 'cloudflare.com') !== false) {
+                                                                $email_host['cloudflare'] = 'Cloudflare';
+                                                            } elseif (strpos($uri, 'domaincontrol.com') !== false) {
+                                                                $email_host['GoDaddy'] = 'GoDaddy';
+                                                            } elseif (strpos($uri, 'bluehost.com') !== false) {
+                                                                $email_host['bluehost'] = 'BlueHost';
+                                                            } elseif (strpos($uri, 'hostgator.com') !== false) {
+                                                                $email_host['HostGator'] = 'HostGator';
+                                                            } elseif (strpos($uri, 'websitewelcome.com') !== false) {
+                                                                $email_host['HostGator'] = 'HostGator';
+                                                            } elseif (strpos($uri, 'microsoftonline.com') !== false) {
+                                                                $email_host['microsoft'] = 'Microsoft 365';
+                                                            } elseif (strpos($uri, 'theplanet.com') !== false) {
+                                                                $email_host['softlayer'] = 'SoftLayer';
+                                                            } elseif (strpos($uri, 'mediatemple.net') !== false) {
+                                                                $email_host['mediatemple'] = 'Media Temple';
+                                                            } elseif (strpos($uri, 'dnszone') !== false) {
+                                                                $email_host['coursevector'] = 'CourseVector';
+                                                            } elseif (strpos($uri, 'nexcess') !== false) {
+                                                                $email_host['nexcess'] = 'Nexcess (Liquid Web)';
+                                                            } elseif (strpos($uri, 'awsdns') !== false) {
+                                                                $email_host['amazon'] = 'AWS Route 53';
+                                                            } elseif (strpos($uri, 'registeredsite.com') !== false) {
+                                                                $email_host['netsol'] = 'Register.com';
+                                                            } elseif (strpos($uri, 'register.com') !== false) {
+                                                                $email_host['netsol'] = 'Register.com';
+                                                            } elseif (strpos($uri, 'worldnic') !== false) {
+                                                                $email_host['netsol'] = 'Network Solutions';
+                                                            } elseif (strpos($uri, 'wordpress.com') !== false) {
+                                                                $email_host['wordpress'] = 'WordPress.com';
+                                                            } elseif (strpos($uri, 'name-services.com') !== false) {
+                                                                $email_host['enom'] = 'eNom (Tucows)';
+                                                            } elseif (strpos($uri, 'hover.com') !== false) {
+                                                                $email_host['tucows'] = 'Tucows';
+                                                            } elseif (strpos($uri, 'ui-dns.') !== false) {
+                                                                $email_host['1and1'] = '1&1 Internet';
+                                                            } elseif (strpos($uri, 'digitalocean.com') !== false) {
+                                                                $email_host['digitalocean'] = 'DigitalOcean';
+                                                            } elseif (strpos($uri, '.azure-dns.') !== false) {
+                                                                $email_host['microsoft'] = 'Microsoft Azure';
+                                                            } elseif (strpos($uri, 'squarespacedns.com') !== false) {
+                                                                $email_host['squarespace'] = 'Squarespace';
+                                                            } elseif (strpos($uri, 'nsone.net') !== false) {
+                                                                $email_host['ns1'] = 'NS1.';
+                                                            } elseif (strpos($uri, 'sgvps.net') !== false) {
+                                                                $email_host['siteground'] = 'SiteGround';
+                                                            } elseif (strpos($uri, 'savvis.net') !== false) {
+                                                                $email_host['centurylink'] = 'CenturyLink Communications';
+                                                            } else {
+                                                                $email_host['Unknown/Host'] = 'Unknown/Host';
+                                                            }
+                                                        }
+                                                        echo implode(', ', $email_host);
+                                                        ?>
+                                </dd>
+
+                                <dt class="col-sm-4">Hosting Provider</dt>
+                                <dd class="col-sm-8"><?php
                                                         foreach ($dns_records['a'] as $record) {
-                                                            $uri = strtolower($record['host']);
                                                             $ip = $record['ip'];
                                                             $ip_info = get_location($ip);
-                                                            //echo $uri . ' ' . $email_target;
-                                                            if ($uri == $email_target) continue;
-
-                                                            // use unique index so we auto filter duplicates
-                                                            if (preg_match("/^mail\./i", $uri)) {
-                                                                //echo $uri . ' a <br>';
-                                                                $email_host['mail'] = $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
-                                                            }
-                                                            // override mail.
-                                                            if (preg_match("/^autodiscover\./i", $uri)) {
-                                                                //echo $uri . ' a <br>';
-                                                                $email_host['mail'] = $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
-                                                            }
+                                                            echo $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
+                                                            break;
                                                         }
-                                                        foreach ($dns_records['cname'] as $record) {
-                                                            $uri = strtolower($record['host']);
+                                                        ?>
+                                </dd>
 
-                                                            if ($uri == $email_target) continue;
+                                <dt class="col-sm-4">Email Provider</dt>
+                                <dd class="col-sm-8"><?php
+                                                        $email_host = array();
+                                                        $email_target = null;
+                                                        $is_spam_filter = false;
+
+                                                        foreach ($dns_records['mx'] as $record) {
+                                                            $uri = strtolower($record['target']);
                                                             $ip = get_host_by_name($record['target']);
-                                                            $ip_info = get_location($ip);
+                                                            $email_target = $uri;
+
 
                                                             // use unique index so we auto filter duplicates
-                                                            if (preg_match("/^mail\./i", $uri)) {
-                                                                //echo $uri . ' cname<br>';
-                                                                if (strpos($record['target'], 'mail.office365.com') !== false) {
-                                                                    $email_host['mail'] = 'Microsoft 365';
-                                                                } else {
-                                                                    $email_host['mail'] = $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
-                                                                }
-                                                            }
-
-                                                            // override mail.
-                                                            if (preg_match("/^autodiscover\./i", $uri)) {
-                                                                //echo $uri . ' cname<br>';
-                                                                if (strpos($record['target'], 'autodiscover.outlook.com') !== false) {
-                                                                    $email_host['mail'] = 'Microsoft 365';
-                                                                } else {
-                                                                    $email_host['mail'] = $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
-                                                                }
+                                                            if (strpos($uri, 'mx25.net') !== false) {
+                                                                $email_host['PostLayer'] = 'PostLayer';
+                                                                $is_spam_filter = true;
+                                                            } elseif (strpos($uri, 'protection.outlook.com') !== false) {
+                                                                $email_host['Office365'] = 'Microsoft 365';
+                                                            } elseif (strpos($uri, 'mail.eo.outlook.com') !== false) {
+                                                                $email_host['Office365'] = 'Microsoft 365';
+                                                            } elseif (strpos($uri, 'googlemail.com') !== false) {
+                                                                $email_host['GMail'] = 'GMail';
+                                                            } elseif (strpos($uri, 'aspmx.l.google.com') !== false) {
+                                                                $email_host['GMail'] = 'GMail';
+                                                            } elseif (strpos($uri, 'emailsrvr.com') !== false) {
+                                                                $email_host['Rackspace'] = 'Rackspace Email Hosting';
+                                                            } elseif (strpos($uri, 'ess.barracudanetworks.com') !== false) {
+                                                                $email_host['Barracuda'] = 'Barracuda Essentials for Email Security';
+                                                                $is_spam_filter = true;
+                                                            } elseif (strpos($uri, 'hostedemail.com') !== false) {
+                                                                $email_host['OpenSRS'] = 'Tucows OpenSRS Hosted Email';
+                                                            } elseif (strpos($uri, 'secureserver.net') !== false) {
+                                                                $email_host['GoDaddy'] = 'GoDaddy';
+                                                            } elseif (strpos($uri, 'mailanyone.net') !== false) {
+                                                                $email_host['fusemail'] = 'FuseMail';
+                                                                $is_spam_filter = true;
+                                                            } elseif (strpos($uri, 'hes.trendmicro.com') !== false) {
+                                                                $email_host['trendmicro'] = 'TrendMicro Hosted Email Security';
+                                                                $is_spam_filter = true;
+                                                            } elseif (strpos($uri, 'ppe-hosted.com') !== false) {
+                                                                $email_host['proofpoint'] = 'Proofpoint Essentials';
+                                                                $is_spam_filter = true;
+                                                            } elseif (strpos($uri, 'comcast.net') !== false) {
+                                                                $email_host['comcast'] = 'Comcast';
+                                                            } elseif (strpos($uri, 'sourcedns') !== false) {
+                                                                $email_host['sourcedns'] = 'Liquid Web';
+                                                            } elseif (strpos($uri, 'netsolmail.net') !== false) {
+                                                                $email_host['netsol'] = 'Network Solutions Hosted Email';
+                                                            } elseif (strpos($uri, 'zoho.com') !== false) {
+                                                                $email_host['zoho'] = 'Zoho';
+                                                            } elseif (strpos($uri, '1and1.com') !== false) {
+                                                                $email_host['1and1'] = '1&1 Internet';
+                                                            } elseif (strpos($uri, 'mxthunder.') !== false) {
+                                                                $email_host['SpamHero'] = 'SpamHero';
+                                                                $is_spam_filter = true;
+                                                            } elseif (strpos($uri, 'hostingplatform.com') !== false) {
+                                                                $email_host['netsol'] = 'Network Solutions Hosted Email';
+                                                            } elseif (strpos($ip, '216.55') !== false) {
+                                                                // 216.55.101.xx
+                                                                // 216.55.102.xx
+                                                                // 216.55.103.xx
+                                                                $email_host['SpamWall'] = 'SpamWall';
+                                                                $is_spam_filter = true;
+                                                            } elseif (strpos($uri, 'reflexion.net') !== false) {
+                                                                $email_host['reflexion'] = 'Reflexion Email Security';
+                                                                $is_spam_filter = true;
+                                                            } elseif (strpos($uri, 'mailspamprotection.com') !== false) {
+                                                                $email_host['siteground'] = 'SiteGround';
+                                                                $is_spam_filter = true;
+                                                            } else {
+                                                                $email_host['Unknown/Self'] = 'Unknown/Self';
                                                             }
                                                         }
-                                                        if (count($email_host) > 0) echo ' (via ' . implode(' ', $email_host) . ')';
-                                                    }
-                                                    ?>
-                            </dd>
 
-                            <dt class="col-sm-3">Hosting Provider</dt>
-                            <dd class="col-sm-9"><?php
-                                                    foreach ($dns_records['a'] as $record) {
-                                                        $ip = $record['ip'];
-                                                        $ip_info = get_location($ip);
-                                                        echo $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
-                                                        break;
-                                                    }
-                                                    ?>
-                            </dd>
-                        </dl>
+                                                        echo implode(', ', $email_host);
+
+                                                        // If behind a mail filter, try to find the origin
+                                                        if ($is_spam_filter) {
+                                                            $email_host = array();
+                                                            foreach ($dns_records['a'] as $record) {
+                                                                $uri = strtolower($record['host']);
+                                                                $ip = $record['ip'];
+                                                                $ip_info = get_location($ip);
+                                                                //echo $uri . ' ' . $email_target;
+                                                                if ($uri == $email_target) continue;
+
+                                                                // use unique index so we auto filter duplicates
+                                                                if (preg_match("/^mail\./i", $uri)) {
+                                                                    //echo $uri . ' a <br>';
+                                                                    $email_host['mail'] = $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
+                                                                }
+                                                                // override mail.
+                                                                if (preg_match("/^autodiscover\./i", $uri)) {
+                                                                    //echo $uri . ' a <br>';
+                                                                    $email_host['mail'] = $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
+                                                                }
+                                                            }
+                                                            foreach ($dns_records['cname'] as $record) {
+                                                                $uri = strtolower($record['host']);
+
+                                                                if ($uri == $email_target) continue;
+                                                                $ip = get_host_by_name($record['target']);
+                                                                $ip_info = get_location($ip);
+
+                                                                // use unique index so we auto filter duplicates
+                                                                if (preg_match("/^mail\./i", $uri)) {
+                                                                    //echo $uri . ' cname<br>';
+                                                                    if (strpos($record['target'], 'mail.office365.com') !== false) {
+                                                                        $email_host['mail'] = 'Microsoft 365';
+                                                                    } else {
+                                                                        $email_host['mail'] = $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
+                                                                    }
+                                                                }
+
+                                                                // override mail.
+                                                                if (preg_match("/^autodiscover\./i", $uri)) {
+                                                                    //echo $uri . ' cname<br>';
+                                                                    if (strpos($record['target'], 'autodiscover.outlook.com') !== false) {
+                                                                        $email_host['mail'] = 'Microsoft 365';
+                                                                    } else {
+                                                                        $email_host['mail'] = $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
+                                                                    }
+                                                                }
+                                                            }
+                                                            if (count($email_host) > 0) echo ' (via ' . implode(' ', $email_host) . ')';
+                                                        }
+                                                        ?>
+                                </dd>
+
+                                <dt class="col-sm-4">Hosting Provider</dt>
+                                <dd class="col-sm-8"><?php
+                                                        foreach ($dns_records['a'] as $record) {
+                                                            $ip = $record['ip'];
+                                                            $ip_info = get_location($ip);
+                                                            echo $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
+                                                            break;
+                                                        }
+                                                        ?>
+                                </dd>
+                            </dl>
+                        </div>
 
                         <?php
                         if (isset($headers["Server"]) || isset($headers["X-Powered-By"]) || isset($headers["X-Amz-Cf-Id"])) {
                             // error_log(print_r($headers, true));
+                            echo "<div class=\"bd-group row\">";
                             echo '<dl class="row">';
                             if (isset($headers["Server"])) {
-                                echo '<dt class="col-sm-3">Server Software</dt>';
-                                echo '<dd class="col-sm-9">' . val_to_string($headers["Server"]) . "</dd>";
+                                echo '<dt class="col-sm-4">Server Software</dt>';
+                                echo '<dd class="col-sm-8">' . val_to_string($headers["Server"]) . "</dd>";
                             }
                             if (isset($headers["X-Powered-By"])) {
-                                echo '<dt class="col-sm-3">Powered By</dt>';
-                                echo "<dd class=\"col-sm-9\">{$headers["X-Powered-By"]}</dd>";
+                                echo '<dt class="col-sm-4">Powered By</dt>';
+                                echo "<dd class=\"col-sm-8\">{$headers["X-Powered-By"]}</dd>";
                             }
                             if (isset($headers["X-Amz-Cf-Id"])) {
-                                echo '<dt class="col-sm-3">Uses CloudFront</dt>';
-                                echo '<dd class="col-sm-9">True</dd>';
+                                echo '<dt class="col-sm-4">Uses CloudFront</dt>';
+                                echo '<dd class="col-sm-8">True</dd>';
                             }
                             echo '</dl>';
+                            echo '</div>';
                         } ?>
                     </div>
                     <div class="col-4">
@@ -2252,16 +2285,41 @@ function translate_org($org)
                 </div>
                 <div class="row">
                     <div class="col">
-                        <h2 class="display-5">DNS</h2>
-                        <table class="table table-dark table-striped records">
-                            <?php
-                            function getZoneHost($domain, $host)
-                            {
-                                if ($domain === $host) return "{$domain}.";
-                                return str_replace(".{$domain}", '', $host);
-                            }
-                            $now = date("Y-m-d H:i:s");
-                            $zoneExportRaw = "; Domain: {$domain}
+                        <?php
+                        if (count($dns_records['ptr']) > 0) { ?>
+                            <h2 class="display-5 bd-group-title">Reverse <abbr title="Domain Name System">DNS</abbr> Record</h2>
+                            <div class="bd-group row">
+                                <table class="table table-dark table-striped records">
+                                    <?php
+                                    foreach ($dns_records['ptr'] as $record) {
+                                        $ip = get_host_by_name($record['target']);
+                                        $ip_info = get_location($ip);
+                                    ?>
+                                        <tr>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Pointer"><?php echo $record['type']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo ($ip_info ? $ip_info->org : ''); ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
+                                        </tr>
+                                    <?php
+                                    }
+                                    ?>
+                                </table>
+                            </div>
+                        <?php } ?>
+
+                        <h2 class="display-5 bd-group-title"><abbr title="Domain Name System">DNS</abbr> Records</h2>
+                        <div class="bd-group row">
+                            <table class="table table-dark table-striped records">
+                                <?php
+                                function getZoneHost($domain, $host)
+                                {
+                                    if ($domain === $host) return "{$domain}.";
+                                    return str_replace(".{$domain}", '', $host);
+                                }
+                                $now = date("Y-m-d H:i:s");
+                                $zoneExportRaw = "; Domain: {$domain}
 ; Exported (y-m-d hh:mm:ss): {$now}
 ;
 ; This file is intended for use for informational and archival
@@ -2289,404 +2347,285 @@ function translate_org($org)
 ; Use at your own risk.
 \n";
 
-                            /*
-							array(11) {
-								["host"]=> string(18) "birdkingdom.stream"
-								["class"]=> string(2) "IN"
-								["ttl"]=> int(7146)
-								["type"]=> string(3) "SOA"
-								["mname"]=> string(16) "ns4.alpnames.com"
-								["rname"]=> string(23) "domainsserv31.gmail.com"
-								["serial"]=> int(2017031112)
-								["refresh"]=> int(7200)
-								["retry"]=> int(7200)
-								["expire"]=> int(172800)
-								["minimum-ttl"]=> int(38400)
-							}
-							*/
-                            $zoneExportRaw .= "; SOA Record\n";
-                            foreach ($dns_records['soa'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['mname']}.\t{$record['rname']}.\t(\n\t\t\t\t\t\t{$record['serial']} ;Serial Number\n\t\t\t\t\t\t{$record['refresh']} ;refresh\n\t\t\t\t\t\t{$record['retry']} ;retry\n\t\t\t\t\t\t{$record['expire']} ;expire\n\t\t\t\t\t\t{$record['minimum-ttl']}\t)\n";
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Start of [a zone of] authority"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Primary nameserver"><?php echo $record['mname']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Hostmaster E-mail address"><?php echo $record['rname']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Serial #"><?php echo $record['serial']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Refresh - <?php echo seconds_to_time($record['refresh']); ?>"><?php echo $record['refresh']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Retry - <?php echo seconds_to_time($record['retry']); ?>"><?php echo $record['retry']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Expire - <?php echo seconds_to_time($record['expire']); ?>"><?php echo $record['expire']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Default TTL - <?php echo seconds_to_time($record['minimum-ttl']); ?>"><?php echo $record['minimum-ttl']; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            $zoneExportRaw .= "\n";
+                                $zoneExportRaw .= "; SOA Record\n";
+                                foreach ($dns_records['soa'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['mname']}.\t{$record['rname']}.\t(\n\t\t\t\t\t\t{$record['serial']} ;Serial Number\n\t\t\t\t\t\t{$record['refresh']} ;refresh\n\t\t\t\t\t\t{$record['retry']} ;retry\n\t\t\t\t\t\t{$record['expire']} ;expire\n\t\t\t\t\t\t{$record['minimum-ttl']}\t)\n";
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Start of [a zone of] authority"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Primary nameserver"><?php echo $record['mname']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Hostmaster E-mail address"><?php echo $record['rname']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Serial #"><?php echo $record['serial']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Refresh - <?php echo seconds_to_time($record['refresh']); ?>"><?php echo $record['refresh']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Retry - <?php echo seconds_to_time($record['retry']); ?>"><?php echo $record['retry']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Expire - <?php echo seconds_to_time($record['expire']); ?>"><?php echo $record['expire']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Default TTL - <?php echo seconds_to_time($record['minimum-ttl']); ?>"><?php echo $record['minimum-ttl']; ?></td>
+                                    </tr>
+                                <?php
+                                }
+                                $zoneExportRaw .= "\n";
 
-                            /*
-							array(5) {
-							  ["host"]=> "smartmgmt.com"
-							  ["class"]=> "IN"
-							  ["ttl"]=> int(3418)
-							  ["type"]=> "NS"
-							  ["target"]=> "ns10.domaincontrol.com"
-							}
-							*/
-                            if (count($dns_records['ns']) > 0) $zoneExportRaw .= "; NS Record\n";
-                            foreach ($dns_records['ns'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['target']}.\n";
+                                if (count($dns_records['ns']) > 0) $zoneExportRaw .= "; NS Record\n";
+                                foreach ($dns_records['ns'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['target']}.\n";
 
-                                $ns = $record['target'];
-                                $ip = get_host_by_name($ns);
-                                $ip_info = get_location($ip);
-                                if ($ip_info) {
-                                    if (isset($server_locations[$ip_info->loc])) {
-                                        $server_locations[$ip_info->loc][] = array('type' => 'Name Server', 'info' => $ip_info);
-                                    } else {
-                                        $server_locations[$ip_info->loc] = array(array('type' => 'Name Server', 'info' => $ip_info));
+                                    $ns = $record['target'];
+                                    $ip = get_host_by_name($ns);
+                                    $ip_info = get_location($ip);
+                                    if ($ip_info) {
+                                        if (isset($server_locations[$ip_info->loc])) {
+                                            $server_locations[$ip_info->loc][] = array('type' => 'Name Server', 'info' => $ip_info);
+                                        } else {
+                                            $server_locations[$ip_info->loc] = array(array('type' => 'Name Server', 'info' => $ip_info));
+                                        }
                                     }
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Namer Server"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo ($ip_info ? $ip_info->org : ''); ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
+                                    </tr>
+                                <?php
                                 }
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Namer Server"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo ($ip_info ? $ip_info->org : ''); ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['ns']) > 0) $zoneExportRaw .= "\n";
+                                if (count($dns_records['ns']) > 0) $zoneExportRaw .= "\n";
 
-                            if (count($dns_records['a']) > 0) $zoneExportRaw .= "; A Record\n";
-                            foreach ($dns_records['a'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['ip']}\n";
+                                if (count($dns_records['a']) > 0) $zoneExportRaw .= "; A Record\n";
+                                foreach ($dns_records['a'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['ip']}\n";
 
-                                $ip = $record['ip'];
-                                $ip_info = get_location($ip);
-                                if ($ip_info) {
-                                    if (isset($server_locations[$ip_info->loc])) {
-                                        $server_locations[$ip_info->loc][] = array('type' => 'Web Server', 'info' => $ip_info);
-                                    } else {
-                                        $server_locations[$ip_info->loc] = array(array('type' => 'Web Server', 'info' => $ip_info));
+                                    $ip = $record['ip'];
+                                    $ip_info = get_location($ip);
+                                    if ($ip_info) {
+                                        if (isset($server_locations[$ip_info->loc])) {
+                                            $server_locations[$ip_info->loc][] = array('type' => 'Web Server', 'info' => $ip_info);
+                                        } else {
+                                            $server_locations[$ip_info->loc] = array(array('type' => 'Web Server', 'info' => $ip_info));
+                                        }
                                     }
+                                    $cname = '';
+                                    // https://superuser.com/questions/1762667/dns-why-does-the-server-return-a-cname-record-when-asked-for-an-mx
+                                    if (isset($record['cname'])) $cname = " <abbr title='CNAME'>&rarr; {$record['cname']}</abbr>";
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host'] . $cname; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Address"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $record['host']; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $ip; ?></td>
+                                    </tr>
+                                <?php
                                 }
-                                $cname = '';
-                                // https://superuser.com/questions/1762667/dns-why-does-the-server-return-a-cname-record-when-asked-for-an-mx
-                                if (isset($record['cname'])) $cname = " <abbr title='CNAME'>&rarr; {$record['cname']}</abbr>";
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host'] . $cname; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Address"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $record['host']; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $ip; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['a']) > 0) $zoneExportRaw .= "\n";
+                                if (count($dns_records['a']) > 0) $zoneExportRaw .= "\n";
 
-                            if (count($dns_records['aaaa']) > 0) $zoneExportRaw .= "; AAAA Record\n";
-                            foreach ($dns_records['aaaa'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['ipv6']}\n";
+                                if (count($dns_records['aaaa']) > 0) $zoneExportRaw .= "; AAAA Record\n";
+                                foreach ($dns_records['aaaa'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['ipv6']}\n";
 
-                                $ip = $record['ipv6'];
-                                $ip_info = get_location($ip);
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="IPv6 Address"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $record['host']; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $ip; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['aaaa']) > 0) $zoneExportRaw .= "\n";
-
-                            if (count($dns_records['cname']) > 0) $zoneExportRaw .= "; CNAME Record\n";
-                            foreach ($dns_records['cname'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['target']}.\n";
-
-                                $ip = get_host_by_name($record['target']);
-                                $ip_info = get_location($ip);
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Canonical Name"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['cname']) > 0) $zoneExportRaw .= "\n";
-
-                            if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "; DNSKEY Record\n";
-                            foreach ($dns_records['dnskey'] as $record) {
-                                // flags, protocol, algorithm, key
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['flags']}\t{$record['protocol']}\t{$record['algorithm']}\t{$record['key']}\n";
-
-                                // Flags lookup
-                                $flags_label = '';
-                                // If bit 7 has value 1, then the DNSKEY record holds a DNS zone key
-                                if (intval($record['flags']) & (1 << 8)) {
-                                    $flags_label .= "Holds DNS Zone Key: True - ";
-                                } else {
-                                    $flags_label .= "Holds DNS Zone Key: False - ";
+                                    $ip = $record['ipv6'];
+                                    $ip_info = get_location($ip);
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="IPv6 Address"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $record['host']; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $ip; ?></td>
+                                    </tr>
+                                <?php
                                 }
-                                // If bit 15 has value 1, then the DNSKEY record holds a key intended for use as a secure entry point.
-                                if (intval($record['flags']) & 1) {
-                                    $flags_label .= 'Secure Entry Point: True';
-                                } else {
-                                    $flags_label .= 'Secure Entry Point: False';
+                                if (count($dns_records['aaaa']) > 0) $zoneExportRaw .= "\n";
+
+                                if (count($dns_records['cname']) > 0) $zoneExportRaw .= "; CNAME Record\n";
+                                foreach ($dns_records['cname'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['target']}.\n";
+
+                                    $ip = get_host_by_name($record['target']);
+                                    $ip_info = get_location($ip);
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Canonical Name"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
+                                    </tr>
+                                <?php
                                 }
+                                if (count($dns_records['cname']) > 0) $zoneExportRaw .= "\n";
 
-                                // Algorithm lookup
-                                $algo_label = '?';
-                                switch ($record['algorithm']) {
-                                    case 1:
-                                        $algo_label = "RSA/MD5";
-                                        break;
-                                    case 2:
-                                        $algo_label = "Diffie-Hellman";
-                                        break;
-                                    case 3:
-                                        $algo_label = "DSA/SHA-1";
-                                        break;
-                                    case 4:
-                                        $algo_label = "Elliptic Curve";
-                                        break;
-                                    case 5:
-                                        $algo_label = "RSA/SHA-1";
-                                        break;
-                                    case 6:
-                                        $algo_label = "DSA-NSEC3-SHA1";
-                                        break;
-                                    case 7:
-                                        $algo_label = "RSASHA1-NSEC3-SHA1";
-                                        break;
-                                    case 8:
-                                        $algo_label = "RSA/SHA-256";
-                                        break;
-                                    case 10:
-                                        $algo_label = "RSA/SHA-512";
-                                        break;
-                                    case 12:
-                                        $algo_label = "GOST R 34.10-2001";
-                                        break;
-                                    case 13:
-                                        $algo_label = "ECDSA/SHA-256";
-                                        break;
-                                    case 14:
-                                        $algo_label = "ECDSA/SHA-384";
-                                        break;
-                                    case 15:
-                                        $algo_label = "Ed25519";
-                                        break;
-                                    case 16:
-                                        $algo_label = "Ed448";
-                                        break;
-                                    case 252:
-                                        $algo_label = "Indirect";
-                                        break;
-                                    case 253:
-                                        $algo_label = "Private";
-                                        break;
-                                    case 254:
-                                        $algo_label = "Private OID";
-                                        break;
-                                }
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="DNS Key"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Flags - <?= $flags_label ?>"><?php echo $record['flags']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Protocol"><?php echo $record['protocol']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Algorithm - <?= $algo_label ?>"><?php echo $record['algorithm']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Public Key" colspan="4"><code><?php echo $record['key']; ?></code></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "\n";
+                                if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "; DNSKEY Record\n";
+                                foreach ($dns_records['dnskey'] as $record) {
+                                    // flags, protocol, algorithm, key
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['flags']}\t{$record['protocol']}\t{$record['algorithm']}\t{$record['key']}\n";
 
-                            // if (count($dns_records['ds']) > 0) $zoneExportRaw .= "; DS Record\n";
-                            foreach ($dns_records['ds'] as $record) {
-                                // $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['keytag']}\t{$record['algorithm']}\t{$record['digesttype']}\t{$record['digest']}\n";
-
-                                // DS records are reported by the parent zone
-                                $lookup_host = count($tld_nameservers_hosts) ? $tld_nameservers_hosts[0]['host'] : '?';
-                                $lookup = " <abbr title='Report by'>&rarr; {$lookup_host}</abbr>";
-
-                                // Algorithm lookup
-                                $algo_label = '?';
-                                switch ($record['algorithm']) {
-                                    case 1:
-                                        $algo_label = "RSA/MD5";
-                                        break;
-                                    case 2:
-                                        $algo_label = "Diffie-Hellman";
-                                        break;
-                                    case 3:
-                                        $algo_label = "DSA/SHA-1";
-                                        break;
-                                    case 4:
-                                        $algo_label = "Elliptic Curve";
-                                        break;
-                                    case 5:
-                                        $algo_label = "RSA/SHA-1";
-                                        break;
-                                    case 6:
-                                        $algo_label = "DSA-NSEC3-SHA1";
-                                        break;
-                                    case 7:
-                                        $algo_label = "RSASHA1-NSEC3-SHA1";
-                                        break;
-                                    case 8:
-                                        $algo_label = "RSA/SHA-256";
-                                        break;
-                                    case 10:
-                                        $algo_label = "RSA/SHA-512";
-                                        break;
-                                    case 12:
-                                        $algo_label = "GOST R 34.10-2001";
-                                        break;
-                                    case 13:
-                                        $algo_label = "ECDSA/SHA-256";
-                                        break;
-                                    case 14:
-                                        $algo_label = "ECDSA/SHA-384";
-                                        break;
-                                    case 15:
-                                        $algo_label = "Ed25519";
-                                        break;
-                                    case 16:
-                                        $algo_label = "Ed448";
-                                        break;
-                                    case 252:
-                                        $algo_label = "Indirect";
-                                        break;
-                                    case 253:
-                                        $algo_label = "Private";
-                                        break;
-                                    case 254:
-                                        $algo_label = "Private OID";
-                                        break;
-                                }
-
-                                // Digest lookup
-                                $digest_label = '?';
-                                switch ($record['digesttype']) {
-                                    case 1:
-                                        $digest_label = "SHA-1";
-                                        break;
-                                    case 2:
-                                        $digest_label = "SHA-256";
-                                        break;
-                                    case 3:
-                                        $digest_label = "GOST R 34.10-2001";
-                                        break;
-                                    case 4:
-                                        $digest_label = "SHA-384";
-                                        break;
-                                }
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host'] . $lookup; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Delegation Signer"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Key Tag"><?php echo $record['keytag']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Algorithm - <?= $algo_label ?>"><?php echo $record['algorithm']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Digest Type - <?= $digest_label ?>"><?php echo $record['digesttype']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Digest" colspan="4"><code><?php echo $record['digest']; ?></code></td>
-                                </tr>
-                            <?php
-                            }
-                            // if (count($dns_records['ds']) > 0) $zoneExportRaw .= "\n";
-
-                            if (count($dns_records['caa']) > 0) $zoneExportRaw .= "; CAA Record\n";
-                            foreach ($dns_records['caa'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['flags']}\t{$record['tag']}\t\"{$record['value']}\"\n";
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Certification Authority Authorization"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Flags"><?php echo $record['flags']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Tag"><?php echo $record['tag']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="5"><code><?php echo $record['value']; ?></code></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['caa']) > 0) $zoneExportRaw .= "\n";
-
-                            if (count($dns_records['mx']) > 0) $zoneExportRaw .= "; MX Record\n";
-                            foreach ($dns_records['mx'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['pri']}\t{$record['target']}.\n";
-
-                                $ip = get_host_by_name($record['target']);
-                                $ip_info = get_location($ip);
-                                if ($ip_info) {
-                                    if (isset($server_locations[$ip_info->loc])) {
-                                        $server_locations[$ip_info->loc][] = array('type' => 'EMail Server', 'info' => $ip_info);
+                                    // Flags lookup
+                                    $flags_label = '';
+                                    // If bit 7 has value 1, then the DNSKEY record holds a DNS zone key
+                                    if (intval($record['flags']) & (1 << 8)) {
+                                        $flags_label .= "Holds DNS Zone Key: True - ";
                                     } else {
-                                        $server_locations[$ip_info->loc] = array(array('type' => 'EMail Server', 'info' => $ip_info));
+                                        $flags_label .= "Holds DNS Zone Key: False - ";
                                     }
+                                    // If bit 15 has value 1, then the DNSKEY record holds a key intended for use as a secure entry point.
+                                    if (intval($record['flags']) & 1) {
+                                        $flags_label .= 'Secure Entry Point: True';
+                                    } else {
+                                        $flags_label .= 'Secure Entry Point: False';
+                                    }
+
+                                    // Algorithm lookup
+                                    $algo_label = '?';
+                                    switch ($record['algorithm']) {
+                                        case 1:
+                                            $algo_label = "RSA/MD5";
+                                            break;
+                                        case 2:
+                                            $algo_label = "Diffie-Hellman";
+                                            break;
+                                        case 3:
+                                            $algo_label = "DSA/SHA-1";
+                                            break;
+                                        case 4:
+                                            $algo_label = "Elliptic Curve";
+                                            break;
+                                        case 5:
+                                            $algo_label = "RSA/SHA-1";
+                                            break;
+                                        case 6:
+                                            $algo_label = "DSA-NSEC3-SHA1";
+                                            break;
+                                        case 7:
+                                            $algo_label = "RSASHA1-NSEC3-SHA1";
+                                            break;
+                                        case 8:
+                                            $algo_label = "RSA/SHA-256";
+                                            break;
+                                        case 10:
+                                            $algo_label = "RSA/SHA-512";
+                                            break;
+                                        case 12:
+                                            $algo_label = "GOST R 34.10-2001";
+                                            break;
+                                        case 13:
+                                            $algo_label = "ECDSA/SHA-256";
+                                            break;
+                                        case 14:
+                                            $algo_label = "ECDSA/SHA-384";
+                                            break;
+                                        case 15:
+                                            $algo_label = "Ed25519";
+                                            break;
+                                        case 16:
+                                            $algo_label = "Ed448";
+                                            break;
+                                        case 252:
+                                            $algo_label = "Indirect";
+                                            break;
+                                        case 253:
+                                            $algo_label = "Private";
+                                            break;
+                                        case 254:
+                                            $algo_label = "Private OID";
+                                            break;
+                                    }
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="DNS Key"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Flags - <?= $flags_label ?>"><?php echo $record['flags']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Protocol"><?php echo $record['protocol']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Algorithm - <?= $algo_label ?>"><?php echo $record['algorithm']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Public Key" colspan="4"><code><?php echo $record['key']; ?></code></td>
+                                    </tr>
+                                <?php
                                 }
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Mail Exchange"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Priority"><?php echo $record['pri']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="6"><?php echo $record['target']; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['mx']) > 0) $zoneExportRaw .= "\n";
+                                if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "\n";
 
-                            if (count($dns_records['txt']) > 0) $zoneExportRaw .= "; TXT Record\n";
-                            foreach ($dns_records['txt'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t\"{$record['txt']}\"\n";
+                                if (count($dns_records['caa']) > 0) $zoneExportRaw .= "; CAA Record\n";
+                                foreach ($dns_records['caa'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['flags']}\t{$record['tag']}\t\"{$record['value']}\"\n";
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Certification Authority Authorization"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Flags"><?php echo $record['flags']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Tag"><?php echo $record['tag']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="5"><code><?php echo $record['value']; ?></code></td>
+                                    </tr>
+                                <?php
+                                }
+                                if (count($dns_records['caa']) > 0) $zoneExportRaw .= "\n";
 
-                                $cname = '';
-                                // https://superuser.com/questions/1762667/dns-why-does-the-server-return-a-cname-record-when-asked-for-an-mx
-                                if (isset($record['cname'])) $cname = " <abbr title='CNAME'>&rarr; {$record['cname']}</abbr>";
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?= $record['host'] . $cname ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Text"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><code><?php echo htmlspecialchars($record['txt']); ?></code></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['txt']) > 0) $zoneExportRaw .= "\n";
+                                if (count($dns_records['mx']) > 0) $zoneExportRaw .= "; MX Record\n";
+                                foreach ($dns_records['mx'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['pri']}\t{$record['target']}.\n";
 
-                            if (count($dns_records['dmarc']) > 0) $zoneExportRaw .= "; DMARC Record\n";
-                            foreach ($dns_records['dmarc'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t\"{$record['txt']}\"\n";
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Text"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><code><?php echo $record['txt']; ?></code></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['dmarc']) > 0) $zoneExportRaw .= "\n";
+                                    $ip = get_host_by_name($record['target']);
+                                    $ip_info = get_location($ip);
+                                    if ($ip_info) {
+                                        if (isset($server_locations[$ip_info->loc])) {
+                                            $server_locations[$ip_info->loc][] = array('type' => 'EMail Server', 'info' => $ip_info);
+                                        } else {
+                                            $server_locations[$ip_info->loc] = array(array('type' => 'EMail Server', 'info' => $ip_info));
+                                        }
+                                    }
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Mail Exchange"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Priority"><?php echo $record['pri']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="6"><?php echo $record['target']; ?></td>
+                                    </tr>
+                                <?php
+                                }
+                                if (count($dns_records['mx']) > 0) $zoneExportRaw .= "\n";
 
-                            /*foreach( $dns_records['hinfo'] as $record ) {
+                                if (count($dns_records['txt']) > 0) $zoneExportRaw .= "; TXT Record\n";
+                                foreach ($dns_records['txt'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t\"{$record['txt']}\"\n";
+
+                                    $cname = '';
+                                    // https://superuser.com/questions/1762667/dns-why-does-the-server-return-a-cname-record-when-asked-for-an-mx
+                                    if (isset($record['cname'])) $cname = " <abbr title='CNAME'>&rarr; {$record['cname']}</abbr>";
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?= $record['host'] . $cname ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Text"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><code><?php echo htmlspecialchars($record['txt']); ?></code></td>
+                                    </tr>
+                                <?php
+                                }
+                                if (count($dns_records['txt']) > 0) $zoneExportRaw .= "\n";
+
+                                if (count($dns_records['dmarc']) > 0) $zoneExportRaw .= "; DMARC Record\n";
+                                foreach ($dns_records['dmarc'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t\"{$record['txt']}\"\n";
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Text"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><code><?php echo $record['txt']; ?></code></td>
+                                    </tr>
+                                <?php
+                                }
+                                if (count($dns_records['dmarc']) > 0) $zoneExportRaw .= "\n";
+
+                                /*foreach( $dns_records['hinfo'] as $record ) {
 								?>
 								<tr>
 									<td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
@@ -2699,64 +2638,49 @@ function translate_org($org)
 								<?php
 							}*/
 
-                            if (count($dns_records['srv']) > 0) $zoneExportRaw .= "; SRV Record\n";
-                            foreach ($dns_records['srv'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['pri']}\t{$record['weight']}\t{$record['port']}\t{$record['target']}.\n";
-                                $ip = get_host_by_name($record['target']);
-                                $ip_info = get_location($ip);
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Service Location"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Priority"><?php echo $record['pri']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Weight"><?php echo $record['weight']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Port"><?php echo $record['port']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="4"><?php echo $record['target']; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['srv']) > 0) $zoneExportRaw .= "\n";
+                                if (count($dns_records['srv']) > 0) $zoneExportRaw .= "; SRV Record\n";
+                                foreach ($dns_records['srv'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['pri']}\t{$record['weight']}\t{$record['port']}\t{$record['target']}.\n";
+                                    $ip = get_host_by_name($record['target']);
+                                    $ip_info = get_location($ip);
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Service Location"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Priority"><?php echo $record['pri']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Weight"><?php echo $record['weight']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Port"><?php echo $record['port']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="4"><?php echo $record['target']; ?></td>
+                                    </tr>
+                                <?php
+                                }
+                                if (count($dns_records['srv']) > 0) $zoneExportRaw .= "\n";
 
-                            // if (count($dns_records['ptr']) > 0) $zoneExportRaw .= "; PTR Record\n";
-                            foreach ($dns_records['ptr'] as $record) {
-                                // $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['txt']}\n";
+                                if (count($dns_records['naptr']) > 0) $zoneExportRaw .= "; NAPTR Record\n";
+                                foreach ($dns_records['naptr'] as $record) {
+                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['order']}\t{$record['pref']}\t{$record['flags']}\t{$record['services']}\t{$record['regex']}\t{$record['replacement']}\n";
+                                ?>
+                                    <tr>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Naming Authority Pointer"><?php echo $record['type']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Order"><?php echo $record['order']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Preference"><?php echo $record['pref']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Flags"><?php echo $record['flags']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Service"><?php echo $record['services']; ?></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Regexp"><code><?php echo $record['regex']; ?></code></td>
+                                        <td data-bs-toggle="tooltip" data-bs-title="Replacement"><?php echo $record['replacement']; ?></td>
+                                    </tr>
+                                <?php
+                                }
+                                if (count($dns_records['naptr']) > 0) $zoneExportRaw .= "\n";
 
-                                $rdns = " <abbr title='Reverse DNS'>&rarr; {$record['host']}</abbr>";
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $domain . $rdns; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Pointer"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Target" colspan="7"><?php echo $record['target']; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            // if (count($dns_records['ptr']) > 0) $zoneExportRaw .= "\n";
-
-                            if (count($dns_records['naptr']) > 0) $zoneExportRaw .= "; NAPTR Record\n";
-                            foreach ($dns_records['naptr'] as $record) {
-                                $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['order']}\t{$record['pref']}\t{$record['flags']}\t{$record['services']}\t{$record['regex']}\t{$record['replacement']}\n";
-                            ?>
-                                <tr>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Naming Authority Pointer"><?php echo $record['type']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Order"><?php echo $record['order']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Preference"><?php echo $record['pref']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Flags"><?php echo $record['flags']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Service"><?php echo $record['services']; ?></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Regexp"><code><?php echo $record['regex']; ?></code></td>
-                                    <td data-bs-toggle="tooltip" data-bs-title="Replacement"><?php echo $record['replacement']; ?></td>
-                                </tr>
-                            <?php
-                            }
-                            if (count($dns_records['naptr']) > 0) $zoneExportRaw .= "\n";
-                            ?>
-                        </table>
+                                ?>
+                            </table>
+                        </div>
                         <button class="btn btn-primary download-dns"><i class="bi bi-download"></i>&nbsp;Download Zone File</button>
                     </div>
                 </div>
@@ -2764,53 +2688,294 @@ function translate_org($org)
 
             <section id="security-tab-pane" class="tab-pane fade" role="tabpanel" aria-labelledby="security-tab" tabindex="0">
 
-                <h2 class="display-5">DNS</h2>
-                <table class="table table-dark table-striped">
-                    <tr>
-                        <th width=250>DNSSEC</th>
-                        <td><?php echo $domain_data['dnssec']; ?></td>
-                    </tr>
-                </table>
+                <h2 class="display-5 bd-group-title">DNS Security</h2>
 
-                <h2 class="display-5">Headers</h2>
-                <table class="table table-dark table-striped">
-                    <?php
-                    $hasAnyHeaders = false;
-                    if (isset($headers["Content-Security-Policy"])) {
-                        $hasAnyHeaders = true;
-                        echo "<tr><th width=250>Content Security Policy (CSP)</th><td ><code>" . val_to_string($headers["Content-Security-Policy"]) . "</code></td></tr>";
+                <?php
+                function addColonSeparators($str)
+                {
+                    $ret = "";
+                    for ($i = 0; $i < strlen($str); $i++) {
+                        $ret .= substr($str, $i, 1) . (($i % 2 == 1) ? ":" : "");
                     }
-                    if (isset($headers["Content-Security-Policy-Report-Only"])) {
-                        $hasAnyHeaders = true;
-                        echo "<tr><th width=250>Content Security Policy (CSP) Report Only</th><td ><code>" . val_to_string($headers["Content-Security-Policy-Report-Only"]) . "</code></td></tr>";
-                    }
-                    if (isset($headers["Public-Key-Pins"])) {
-                        $hasAnyHeaders = true;
-                        echo "<tr><th width=250>Public Key Pins (HPKP)</th><td ><code>" . val_to_string($headers["Public-Key-Pins"]) . "</code></td></tr>";
-                    }
-                    if (isset($headers["Strict-Transport-Security"])) {
-                        $hasAnyHeaders = true;
-                        echo "<tr><th width=250>Strict Transport Security (HSTS)</th><td ><code>" . val_to_string($headers["Strict-Transport-Security"]) . "</code></td></tr>";
-                    }
-                    if (isset($headers["X-Frame-Options"])) {
-                        $hasAnyHeaders = true;
-                        echo "<tr><th width=250>Frame Options</th><td ><code>" . val_to_string($headers["X-Frame-Options"]) . "</code></td></tr>";
-                    }
-                    if (isset($headers["X-Xss-Protection"])) {
-                        $hasAnyHeaders = true;
-                        echo "<tr><th width=250>XSS Protection</th><td ><code>" . val_to_string($headers["X-Xss-Protection"]) . "</code></td></tr>";
-                    }
-                    if (isset($headers["X-Content-Type-Options"])) {
-                        $hasAnyHeaders = true;
-                        echo "<tr><th width=250>Content Type Options</th><td ><code>" . val_to_string($headers["X-Content-Type-Options"]) . "</code></td></tr>";
-                    }
-                    if (!$hasAnyHeaders) {
-                        echo "<tr><th width=250></th><td>No related headers found</td></tr>";
-                    }
-                    ?>
-                </table>
+                    return strtoupper(rtrim($ret, ":"));
+                }
 
-                <h2 class="display-5">SSL Certificate</h2>
+                function isHex(string $str): bool
+                {
+                    if (str_starts_with(strtolower($str), '0x')) {
+                        $str = substr($str, 2);
+                    }
+
+                    return ctype_xdigit($str);
+                }
+
+                // http://www.zedwood.com/article/php-parse-x509certificate
+                //src: http://php.net/manual/en/ref.bc.php
+                function bcdechex($dec)
+                {
+                    // PHP 7
+                    // https://www.designcise.com/web/tutorial/how-to-check-if-string-is-a-hexadecimal-value-in-php
+                    if (isHex($dec)) {
+                        if (str_starts_with(strtolower($dec), '0x')) {
+                            $dec = substr($dec, 2);
+                        }
+                        return $dec;
+                    }
+
+                    $hex = '';
+                    do {
+                        $last = bcmod($dec, 16);
+                        $hex = dechex($last) . $hex;
+                        $dec = bcdiv(bcsub($dec, $last), 16);
+                    } while ($dec > 0);
+
+                    // Make sure it's an even length
+                    if (strlen($hex) % 2 !== 0) $hex = '0' . $hex;
+                    return $hex;
+                }
+
+                foreach ($dns_records['dnskey'] as $key => $record) {
+                    echo "<div class=\"bd-group row\">";
+                    echo "<h3 class=\"bg-group-section-title col-sm-3\">DNS Key</h3>";
+                    echo "<dl class=\"row\">";
+                    // Flags lookup
+                    $flags_label = '';
+                    // If bit 7 has value 1, then the DNSKEY record holds a DNS zone key
+                    echo "<dt class=\"col-sm-3\">Holds DNS Zone Key</dt>";
+                    if (intval($record['flags']) & (1 << 8)) {
+                        echo "<dd class=\"col-sm-9\">True</dd>";
+                    } else {
+                        echo "<dd class=\"col-sm-9\">False</dd>";
+                    }
+
+                    // If bit 15 has value 1, then the DNSKEY record holds a key intended for use as a secure entry point.
+                    echo "<dt class=\"col-sm-3\">Secure Entry Point</dt>";
+                    if (intval($record['flags']) & 1) {
+                        echo "<dd class=\"col-sm-9\">True</dd>";
+                    } else {
+                        echo "<dd class=\"col-sm-9\">False</dd>";
+                    }
+
+                    // Algorithm lookup
+                    $algo_label = '?';
+                    switch ($record['algorithm']) {
+                        case 1:
+                            $algo_label = "RSA/MD5";
+                            break;
+                        case 2:
+                            $algo_label = "Diffie-Hellman";
+                            break;
+                        case 3:
+                            $algo_label = "DSA/SHA-1";
+                            break;
+                        case 4:
+                            $algo_label = "Elliptic Curve";
+                            break;
+                        case 5:
+                            $algo_label = "RSA/SHA-1";
+                            break;
+                        case 6:
+                            $algo_label = "DSA-NSEC3-SHA1";
+                            break;
+                        case 7:
+                            $algo_label = "RSASHA1-NSEC3-SHA1";
+                            break;
+                        case 8:
+                            $algo_label = "RSA/SHA-256";
+                            break;
+                        case 10:
+                            $algo_label = "RSA/SHA-512";
+                            break;
+                        case 12:
+                            $algo_label = "GOST R 34.10-2001";
+                            break;
+                        case 13:
+                            $algo_label = "ECDSA/SHA-256";
+                            break;
+                        case 14:
+                            $algo_label = "ECDSA/SHA-384";
+                            break;
+                        case 15:
+                            $algo_label = "Ed25519";
+                            break;
+                        case 16:
+                            $algo_label = "Ed448";
+                            break;
+                        case 252:
+                            $algo_label = "Indirect";
+                            break;
+                        case 253:
+                            $algo_label = "Private";
+                            break;
+                        case 254:
+                            $algo_label = "Private OID";
+                            break;
+                    }
+
+                    echo "<dt class=\"col-sm-3\">Algorithm</dt>";
+                    echo "<dd class=\"col-sm-9\">{$algo_label}</dd>";
+
+                    echo "<dt class=\"col-sm-3\">Protocol</dt>";
+                    echo "<dd class=\"col-sm-9\">{$record['protocol']}</dd>";
+
+                    echo "<dt class=\"col-sm-3\">Public Key</dt>";
+                    echo "<dd class=\"col-sm-9\"><code>" . addColonSeparators(bin2hex(base64_decode($record['key']))) . "</code></dd>";
+
+                    echo "</dl>";
+                    echo "</div>";
+                }
+
+                foreach ($dns_records['ds'] as $record) {
+                    // DS records are reported by the parent zone
+                    $lookup_host = count($tld_nameservers_hosts) ? $tld_nameservers_hosts[0]['host'] : '?';
+                    $lookup = " <abbr title='Report by'>&rarr; {$lookup_host}</abbr>";
+
+                    echo "<div class=\"bd-group row\">";
+                    echo "<h3 class=\"bg-group-section-title col-sm-3\">Delegation Signer via {$lookup_host}</h3>";
+                    echo "<dl class=\"row\">";
+
+                    // Algorithm lookup
+                    $algo_label = '?';
+                    switch ($record['algorithm']) {
+                        case 1:
+                            $algo_label = "RSA/MD5";
+                            break;
+                        case 2:
+                            $algo_label = "Diffie-Hellman";
+                            break;
+                        case 3:
+                            $algo_label = "DSA/SHA-1";
+                            break;
+                        case 4:
+                            $algo_label = "Elliptic Curve";
+                            break;
+                        case 5:
+                            $algo_label = "RSA/SHA-1";
+                            break;
+                        case 6:
+                            $algo_label = "DSA-NSEC3-SHA1";
+                            break;
+                        case 7:
+                            $algo_label = "RSASHA1-NSEC3-SHA1";
+                            break;
+                        case 8:
+                            $algo_label = "RSA/SHA-256";
+                            break;
+                        case 10:
+                            $algo_label = "RSA/SHA-512";
+                            break;
+                        case 12:
+                            $algo_label = "GOST R 34.10-2001";
+                            break;
+                        case 13:
+                            $algo_label = "ECDSA/SHA-256";
+                            break;
+                        case 14:
+                            $algo_label = "ECDSA/SHA-384";
+                            break;
+                        case 15:
+                            $algo_label = "Ed25519";
+                            break;
+                        case 16:
+                            $algo_label = "Ed448";
+                            break;
+                        case 252:
+                            $algo_label = "Indirect";
+                            break;
+                        case 253:
+                            $algo_label = "Private";
+                            break;
+                        case 254:
+                            $algo_label = "Private OID";
+                            break;
+                    }
+
+                    // Digest lookup
+                    $digest_label = '?';
+                    switch ($record['digesttype']) {
+                        case 1:
+                            $digest_label = "SHA-1";
+                            break;
+                        case 2:
+                            $digest_label = "SHA-256";
+                            break;
+                        case 3:
+                            $digest_label = "GOST R 34.10-2001";
+                            break;
+                        case 4:
+                            $digest_label = "SHA-384";
+                            break;
+                    }
+
+                    echo "<dt class=\"col-sm-3\">Key Tag</dt>";
+                    echo "<dd class=\"col-sm-9\">{$record['keytag']}</dd>";
+
+                    echo "<dt class=\"col-sm-3\">Algorithm</dt>";
+                    echo "<dd class=\"col-sm-9\">{$algo_label}</dd>";
+
+                    echo "<dt class=\"col-sm-3\">Digest Type</dt>";
+                    echo "<dd class=\"col-sm-9\">{$digest_label}</dd>";
+
+                    echo "<dt class=\"col-sm-3\">Digest</dt>";
+                    echo "<dd class=\"col-sm-9\"><code>" . addColonSeparators($record['digest']) . "</code></dd>";
+
+                    echo "</dl>";
+                    echo "</div>";
+                }
+
+                if (count($dns_records['dnskey']) === 0 && count($dns_records['ds']) === 0) {
+                    echo "<div class=\"bd-group row\">";
+                    // echo "<h3 class=\"bg-group-section-title col-sm-3\">Delegation Signer via {$lookup_host}</h3>";
+                    echo "<dl class=\"row\">";
+                    echo "<dt class=\"col-sm-3\"></dt>";
+                    echo "<dd class=\"col-sm-9\">No DNSSEC records found</dd>";
+
+                    echo "</dl>";
+                    echo "</div>";
+                }
+                ?>
+
+                <h2 class="display-5 mt-5 bd-group-title">HTTP Security Headers</h2>
+                <div class="bd-group row">
+                    <dl class="row">
+                        <?php
+                        $hasAnyHeaders = false;
+                        if (isset($headers["Content-Security-Policy"])) {
+                            $hasAnyHeaders = true;
+                            echo "<dt class=\"col-sm-3\"><abbr title=\"Content Security Policy\">CSP</abbr></dt><dd class=\"col-sm-9\">" . val_to_string($headers["Content-Security-Policy"]) . "</dd>";
+                        }
+                        if (isset($headers["Content-Security-Policy-Report-Only"])) {
+                            $hasAnyHeaders = true;
+                            echo "<dt class=\"col-sm-3\"><abbr title=\"Content Security Policy\">CSP</abbr> Report Only</dt><dd class=\"col-sm-9\">" . val_to_string($headers["Content-Security-Policy-Report-Only"]) . "</dd>";
+                        }
+                        if (isset($headers["Public-Key-Pins"])) {
+                            $hasAnyHeaders = true;
+                            echo "<dt class=\"col-sm-3\"><abbr title=\"HTTP Public Key Pinning\">HPKP</abbr></dt><dd class=\"col-sm-9\">" . val_to_string($headers["Public-Key-Pins"]) . "</dd>";
+                        }
+                        if (isset($headers["Strict-Transport-Security"])) {
+                            $hasAnyHeaders = true;
+                            echo "<dt class=\"col-sm-3\"><abbr title=\"HTTP Strict Transport Security\">HSTS</abbr></dt><dd class=\"col-sm-9\">" . val_to_string($headers["Strict-Transport-Security"]) . "</dd>";
+                        }
+                        if (isset($headers["X-Frame-Options"])) {
+                            $hasAnyHeaders = true;
+                            echo "<dt class=\"col-sm-3\">Frame Options</dt><dd class=\"col-sm-9\">" . val_to_string($headers["X-Frame-Options"]) . "</dd>";
+                        }
+                        if (isset($headers["X-Xss-Protection"])) {
+                            $hasAnyHeaders = true;
+                            echo "<dt class=\"col-sm-3\">XSS Protection</dt><dd class=\"col-sm-9\">" . val_to_string($headers["X-Xss-Protection"]) . "</dd>";
+                        }
+                        if (isset($headers["X-Content-Type-Options"])) {
+                            $hasAnyHeaders = true;
+                            echo "<dt class=\"col-sm-3\">Content Type Options</dt><dd class=\"col-sm-9\">" . val_to_string($headers["X-Content-Type-Options"]) . "</dd>";
+                        }
+                        if (!$hasAnyHeaders) {
+                            echo "<dt class=\"col-sm-3\"></dt><dd class=\"col-sm-9\">No related headers found</dd>";
+                        }
+                        ?>
+                    </dl>
+                </div>
+
+                <h2 class="display-5 mt-5 bd-group-title">SSL/TLS Certificate</h2>
                 <?php
 
                 if ($ssl) {
@@ -2821,10 +2986,26 @@ Trusted Leaf Certificate
 parsed.names: mariani.life
 parsed.extensions.subject_alt_name.dns_names: mariani.life*/
                     $cert = openssl_x509_parse($ssl);
-                    $pub_key = openssl_pkey_get_public($ssl);
-                    $keyData = openssl_pkey_get_details($pub_key);
+                    $pub_key_raw = openssl_pkey_get_public($ssl);
+                    $pub_key = openssl_pkey_get_details($pub_key_raw);
                     $cert_interval = date_diff($date_now, date_create(gmdate("Y-m-d", $cert['validTo_time_t'])));
                     $cert_ttl = seconds_to_time($cert_interval->format('%a') * 86400);
+                    $pub_key_bin = base64_decode($pub_key['key']);
+                    $pub_key_type = '';
+                    switch ($pub_key['type']) {
+                        case 0:
+                            $pub_key_type = 'RSA';
+                            break;
+                        case 1:
+                            $pub_key_type = 'DSA';
+                            break;
+                        case 2:
+                            $pub_key_type = 'Diffie-Hellman';
+                            break;
+                        case 3:
+                            $pub_key_type = 'Elliptic Curve';
+                            break;
+                    }
 
                     //https://github.com/Wikinaut/MySimpleCertificateViewer/blob/master/index.php
                     // Decode the certificate to get fingerprints.
@@ -2833,9 +3014,18 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
                     $cleanedCert = preg_replace('/\-+(BEGIN|END) CERTIFICATE\-+/', '', $cert_raw);
                     $cleanedCert = str_replace(array("\n\r", "\n", "\r"), '', trim($cleanedCert));
                     $decCert = base64_decode($cleanedCert);
-                    $sha1_fingerprint = sha1($decCert);
-                    $md5_fingerprint = md5($decCert);
+                    $sha1_fingerprint = hash('sha1', $decCert);
+                    $md5_fingerprint = hash('md5', $decCert);
                     $sha256_fingerprint = hash('sha256', $decCert);
+
+                    // https://stackoverflow.com/questions/54779875/how-to-get-ssl-certificate-hash-algorithm-oid-using-phps-openssl-x509-parse
+                    $cert_version = 1;
+                    switch ($cert['version']) {
+                        case 1:
+                            $cert_version = 2;
+                        case 2:
+                            $cert_version = 3;
+                    }
 
                     $alt_names = explode(', ', $cert['extensions']['subjectAltName']);
                     function strip_dns($name)
@@ -2843,151 +3033,173 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
                         return str_replace('DNS:', '', $name);
                     }
                     $alt_names = array_map('strip_dns', $alt_names);
-
-                    function addColonSeparators($str)
-                    {
-                        $ret = "";
-                        for ($i = 0; $i < strlen($str); $i++) {
-                            $ret .= substr($str, $i, 1) . (($i % 2 == 1) ? ":" : "");
-                        }
-                        return strtoupper(rtrim($ret, ":"));
-                    }
-
-                    function isHex(string $str): bool
-                    {
-                        if (str_starts_with(strtolower($str), '0x')) {
-                            $str = substr($str, 2);
-                        }
-
-                        return ctype_xdigit($str);
-                    }
-
-                    // http://www.zedwood.com/article/php-parse-x509certificate
-                    //src: http://php.net/manual/en/ref.bc.php
-                    function bcdechex($dec)
-                    {
-                        // PHP 7
-                        // https://www.designcise.com/web/tutorial/how-to-check-if-string-is-a-hexadecimal-value-in-php
-                        if (isHex($dec)) {
-                            if (str_starts_with(strtolower($dec), '0x')) {
-                                $dec = substr($dec, 2);
-                            }
-                            return $dec;
-                        }
-
-                        $hex = '';
-                        do {
-                            $last = bcmod($dec, 16);
-                            $hex = dechex($last) . $hex;
-                            $dec = bcdiv(bcsub($dec, $last), 16);
-                        } while ($dec > 0);
-
-                        // Make sure it's an even length
-                        if (strlen($hex) % 2 !== 0) $hex = '0' . $hex;
-                        return $hex;
-                    }
                 ?>
 
-                    <h3>Issued To</h3>
-                    <table class="table table-dark table-striped">
-                        <tr>
-                            <th width=250>Common Name (CN)</th>
-                            <td><?php echo $cert['subject']['CN']; ?></td>
-                        </tr>
-                        <tr>
-                            <th>Alt Name(s)</th>
-                            <td><?php echo implode('<br/>', $alt_names); ?></td>
-                        </tr>
-                        <tr>
-                            <th>Organization (O)</th>
-                            <td><?php echo isset($cert['subject']['O']) ? val_to_string($cert['subject']['O']) : '&lt;Not Part Of Certificate&gt;'; ?></td>
-                        </tr>
-                        <tr>
-                            <th>Organizational Unit (OU)</th>
-                            <td><?php echo isset($cert['subject']['OU']) ? val_to_string($cert['subject']['OU']) : '&lt;Not Part Of Certificate&gt;'; ?></td>
-                        </tr>
-                        <tr>
-                            <th>Serial Number</th>
-                            <td><?php echo addColonSeparators(bcdechex($cert['serialNumber'])); ?></td>
-                            <!-- <td><?php echo $cert['serialNumber']; ?></td> -->
-                        </tr>
-                    </table>
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Subject Name</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Country</dt>
+                            <dd class="col-sm-9"><?= $cert['subject']['C'] ?></dd>
 
-                    <h3>Issued By</h3>
-                    <table class="table table-dark table-striped">
-                        <tr>
-                            <th width=250>Common Name (CN)</th>
-                            <td><?php echo $cert['issuer']['CN']; ?></td>
-                        </tr>
-                        <tr>
-                            <th>Organization (O)</th>
-                            <td><?php echo isset($cert['issuer']['O']) ? val_to_string($cert['issuer']['O']) : '&lt;Not Part Of Certificate&gt;'; ?></td>
-                        </tr>
-                        <tr>
-                            <th>Organizational Unit (OU)</th>
-                            <td><?php echo isset($cert['issuer']['OU']) ? val_to_string($cert['issuer']['OU']) : '&lt;Not Part Of Certificate&gt;'; ?></td>
-                        </tr>
-                    </table>
+                            <dt class="col-sm-3">State/Province</dt>
+                            <dd class="col-sm-9"><?= $cert['subject']['ST'] ?></dd>
 
-                    <h3>Period of Validity</h3>
-                    <table class="table table-dark table-striped">
-                        <tr>
-                            <th width=250>Begins On</th>
-                            <td><?php echo gmdate("l, F d, Y", $cert['validFrom_time_t']); ?></td>
-                        </tr>
-                        <tr>
-                            <th>Expires On</th>
-                            <td><?php echo gmdate("l, F d, Y", $cert['validTo_time_t']); ?></td>
-                        </tr>
-                        <tr>
-                            <th>Expires in</th>
-                            <td><?php echo $cert_ttl; ?></td>
-                        </tr>
-                    </table>
+                            <dt class="col-sm-3">Locality</dt>
+                            <dd class="col-sm-9"><?= $cert['subject']['L'] ?></dd>
 
-                    <h3>Details</h3>
-                    <table class="table table-dark table-striped">
-                        <tr>
-                            <th width=250>SHA-256 Fingerprint</th>
-                            <td><?php echo addColonSeparators($sha256_fingerprint); ?></td>
-                        </tr>
-                        <tr>
-                            <th>SHA1 Fingerprint</th>
-                            <td><?php echo addColonSeparators($sha1_fingerprint); ?></td>
-                        </tr>
-                        <tr>
-                            <th>MD5 Fingerprint</th>
-                            <td><?php echo addColonSeparators($md5_fingerprint); ?></td>
-                        </tr>
-                        <tr>
-                            <th>Key Length (Bits)</th>
-                            <td><?php echo $keyData['bits']; ?></td>
-                        </tr>
-                        <tr>
-                            <th>Signature Algorithm</th>
-                            <td><?php echo $cert['signatureTypeSN']; ?></td>
-                        </tr>
-                        <tr>
-                            <th>Public Key</th>
-                            <td>
+                            <dt class="col-sm-3">Organization</dt>
+                            <dd class="col-sm-9"><?= $cert['subject']['O'] ?></dd>
+
+                            <dt class="col-sm-3">Common Name</dt>
+                            <dd class="col-sm-9"><?= $cert['subject']['CN'] ?></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Issuer Name</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Country</dt>
+                            <dd class="col-sm-9"><?= val_to_string($cert['issuer']['C']) ?></dd>
+
+                            <?php if (isset($cert['issuer']['O'])) { ?>
+                                <dt class="col-sm-3">Organization</dt>
+                                <dd class="col-sm-9"><?= val_to_string($cert['issuer']['O']) ?></dd>
+                            <?php } ?>
+
+                            <?php if (isset($cert['issuer']['OU'])) { ?>
+                                <dt class="col-sm-3">Organizational Unit</dt>
+                                <dd class="col-sm-9"><?= val_to_string($cert['issuer']['OU']) ?></dd>
+                            <?php } ?>
+
+                            <dt class="col-sm-3">Common Name</dt>
+                            <dd class="col-sm-9"><?= $cert['issuer']['CN'] ?></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Validity</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Valid From</dt>
+                            <dd class="col-sm-9"><?= gmdate("D, d M Y H:i:s", $cert['validFrom_time_t']) ?> GMT</dd>
+
+                            <dt class="col-sm-3">Valid Until</dt>
+                            <dd class="col-sm-9"><?= gmdate("D, d M Y H:i:s", $cert['validTo_time_t']) ?> GMT</dd>
+
+                            <dt class="col-sm-3">Expires in</dt>
+                            <dd class="col-sm-9"><?= $cert_ttl ?></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Subject Alt Names</h3>
+                        <dl class="row">
+                            <?php
+                            foreach ($alt_names as $alt_name) {
+                                echo "<dt class=\"col-sm-3\">DNS Name</dt>";
+                                echo "<dd class=\"col-sm-9\">{$alt_name}</dd>";
+                            }
+                            ?>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Public Key Info</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Algorithm</dt>
+                            <dd class="col-sm-9"><?= $pub_key_type ?></dd>
+
+                            <dt class="col-sm-3">Key Size</dt>
+                            <dd class="col-sm-9"><?= $pub_key['bits'] ?> Bits</dd>
+
+                            <!--<dt class="col-sm-3">Public Value</dt>
+                            <dd class="col-sm-9"><code><?= addColonSeparators(bin2hex($pub_key_bin)) ?></code></dd>-->
+
+                            <dt class="col-sm-3">Raw Public Value</dt>
+                            <dd class="col-sm-9">
                                 <div class="bd-code-snippet">
                                     <div class="highlight">
-                                        <pre><?= $keyData['key'] ?></pre>
+                                        <pre><?= $pub_key['key'] ?></pre>
                                     </div>
                                 </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Certificate</th>
-                            <td>
+                            </dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Miscellaneous</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Serial Number</dt>
+                            <dd class="col-sm-9"><code><?= addColonSeparators(bcdechex($cert['serialNumber'])) ?></code></dd>
+                            <?php //<dd class="col-sm-9"> $cert['serialNumber'] ></dd>
+                            ?>
+
+                            <dt class="col-sm-3">Signature Algorithm</dt>
+                            <dd class="col-sm-9"><?= $cert['signatureTypeSN'] ?></dd>
+
+                            <dt class="col-sm-3">Version</dt>
+                            <dd class="col-sm-9"><?= $cert_version ?></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Fingerprints</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">SHA-256</dt>
+                            <dd class="col-sm-9"><code><?= addColonSeparators($sha256_fingerprint) ?></code></dd>
+
+                            <dt class="col-sm-3">SHA-1</dt>
+                            <dd class="col-sm-9"><code><?= addColonSeparators($sha1_fingerprint) ?></code></dd>
+
+                            <dt class="col-sm-3">MD5</dt>
+                            <dd class="col-sm-9"><code><?= addColonSeparators($md5_fingerprint) ?></code></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Key Usages</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Purposes</dt>
+                            <dd class="col-sm-9"><?= $cert['extensions']['keyUsage'] ?></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Extended Key Usages</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Purposes</dt>
+                            <dd class="col-sm-9"><?= $cert['extensions']['extendedKeyUsage'] ?></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Subject Key ID</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Key ID</dt>
+                            <dd class="col-sm-9"><code><?= $cert['extensions']['subjectKeyIdentifier'] ?></code></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Authority Key ID</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Key ID</dt>
+                            <dd class="col-sm-9"><code><?= str_replace('keyid:', '', $cert['extensions']['authorityKeyIdentifier']) ?></code></dd>
+                        </dl>
+                    </div>
+
+                    <div class="bd-group row">
+                        <h3 class="bg-group-section-title col-sm-3">Certificate</h3>
+                        <dl class="row">
+                            <dt class="col-sm-3">Raw Certificate</dt>
+                            <dd class="col-sm-9">
                                 <div class="bd-code-snippet">
                                     <div class="highlight">
                                         <pre><?= $cert_raw ?></pre>
                                     </div>
                                 </div>
-                            </td>
-                        </tr>
-                    </table>
+                            </dd>
+                        </dl>
+                    </div>
                 <?php
                 } else {
                     echo '<p>No SSL/TLS certificate found</p>';
