@@ -1359,7 +1359,7 @@ $0.50 USD / 1,000 additional map loads, up to 100,000 daily, if billing is enabl
 // DNSKEY cloudflare.com
 // DS cloudflare.com must ask parent zone nameserver
 // wildcards everything accuaudits.com
-$domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : 'caatest.co.uk';
+$domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : 'mariani.life';
 $line_breaks = array("\r", "\n");
 $domain = get_clean_domain($domain);
 $root_domain = get_root_domain($domain);
@@ -2380,6 +2380,12 @@ function translate_org($org)
 ; authoritative name server and contact e-mail address information,
 ; and add the correct NS records for the name servers which will
 ; be authoritative for this domain.
+;
+; Finally, these records may not be completely accurate
+; due to the nature of how they were acquired. DNS does not allow
+; access to all DNS records of a particular domain. Instead they
+; must be requested by name. This website attempts many known
+; combinations but ultimately will never be 100% accurate.
 ;
 ; For further information, please consult the BIND documentation
 ; located on the following website:
@@ -3478,6 +3484,13 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
 			<pre><?php var_dump($dns_cache); ?></pre>
 			*/
             ?>
+            <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4393629565174725" crossorigin="anonymous"></script>
+            <!-- DNS Lookup Footer -->
+            <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-4393629565174725" data-ad-slot="4188568892" data-ad-format="auto" data-full-width-responsive="true"></ins>
+            <script>
+                (adsbygoogle = window.adsbygoogle || []).push({});
+            </script>
+            <small class="mb-3 d-block mt-3">The records displayed may not be completely accurate due to the nature of how they were acquired. DNS does not allow access to all DNS records of a particular domain. Instead they must be requested by name. This website attempts many known combinations but ultimately will never be 100% accurate.</small>
             <small>IP Location provided by: <a href="https://tools.keycdn.com/geo">KeyCDN</a> <?= "({$keycdn_count} queries)" ?> | <a href="https://ipinfo.io/">ipinfo.io</a> <?= "({$ipinfo_count} queries)" ?> | <a href="https://ip-api.com/">ip-api</a> <?= "({$ipapi_count} queries)" ?></small><br>
             <small><a href="https://www.arin.net/">ARIN</a> <?= "({$arin_count} queries)" ?> | <a href="https://www.php.net/manual/en/function.gethostbyaddr.php">DNS</a> <?= "({$dns_count} queries)" ?></small>
         </div>
