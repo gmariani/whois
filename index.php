@@ -6,17 +6,17 @@ $dotenv->load();
 
 error_reporting(E_ALL ^ E_WARNING);
 set_time_limit(20);
-$host_cache = array();
-$ip_cache = array();
-$dns_cache = array();
-$ipinfo_cache = array();
+$host_cache = [];
+$ip_cache = [];
+$dns_cache = [];
+$ipinfo_cache = [];
 $ipinfo_count = 0;
 $ipapi_count = 0;
 $keycdn_count = 0;
 $arin_count = 0;
 $dns_count = 0;
-$server_locations = array();
-$errors = array();
+$server_locations = [];
+$errors = [];
 
 // COX Hosting: 7trees.com
 // LiquidWeb: Coursevector.com
@@ -59,11 +59,190 @@ function get_host_by_name($domain)
     return $ip_cache[$domain];
 }
 
+function dns_type_to_string(int $type)
+{
+    $type_string = '';
+    switch ($type) {
+        case DNS_A:
+            $type_string = 'A';
+            break;
+        case DNS_CNAME:
+            $type_string = 'CNAME';
+            break;
+        case DNS_HINFO:
+            $type_string = 'HINFO';
+            break;
+        case DNS_CAA:
+            $type_string = 'CAA';
+            break;
+        case DNS_MX:
+            $type_string = 'MX';
+            break;
+        case DNS_NS:
+            $type_string = 'NS';
+            break;
+        case DNS_PTR:
+            $type_string = 'PTR';
+            break;
+        case DNS_SOA:
+            $type_string = 'SOA';
+            break;
+        case DNS_TXT:
+            $type_string = 'TXT';
+            break;
+        case DNS_AAAA:
+            $type_string = 'AAAA';
+            break;
+        case DNS_SRV:
+            $type_string = 'SRV';
+            break;
+        case DNS_NAPTR:
+            $type_string = 'NAPTR';
+            break;
+        case DNS_A6:
+            $type_string = 'A6';
+            break;
+        case DNS_DNSKEY:
+            $type_string = 'DNSKEY';
+            break;
+        case DNS_DS:
+            $type_string = 'DS';
+            break;
+        default:
+            $type_string = '?';
+    }
+    return $type_string;
+}
+
+function netdns2_to_native(Net_DNS2_Packet_Response $query_response, int $type)
+{
+    global $dns_resolver;
+
+    $result = [];
+    foreach ($query_response->answer as $rr) {
+        // Hide/drop the binary as this messes up var_dump
+        $rr->rdata = '';
+
+        // if ($type_string != $rr->type) {
+        // error_log($type_string . ' != ' . $rr->type);
+        // error_log(print_r($rr, true));
+        // $test = dns_get_record($host, $type);
+        // error_log(print_r($test, true));
+        // }
+
+        $rr_data = [
+            'host' => $rr->name,
+            'class' => $rr->class,
+            'ttl' => $rr->ttl,
+            'type' => $rr->type,
+        ];
+        if ($type === DNS_A) {
+            $rr_data['ip'] = $rr->address;
+        }
+        if ($type === DNS_CNAME) {
+            $rr_data['target'] = $rr->cname;
+        }
+        if ($type === DNS_CAA) {
+            $rr_data['flags'] = $rr->flags;
+            $rr_data['tag'] = $rr->tag;
+            $rr_data['value'] = $rr->value;
+        }
+        if ($type === DNS_MX) {
+            // When response is a CNAME
+            if (property_exists($rr, 'pri')) {
+                $rr_data['pri'] = $rr->preference;
+                $rr_data['target'] = $rr->exchange;
+            } else {
+                // MX records have to point directly to a server's A record or AAAA record. Pointing to a CNAME is forbidden by the RFC documents that define how MX records function.
+                break;
+            }
+        }
+        if ($type === DNS_NS) {
+            $rr_data['target'] = $rr->nsdname;
+        }
+        if ($type === DNS_PTR) {
+            $rr_data['target'] = $rr->ptrdname;
+        }
+        if ($type === DNS_SOA) {
+            $rr_data['mname'] = $rr->mname;
+            $rr_data['rname'] = $rr->rname;
+            $rr_data['serial'] = $rr->serial;
+            $rr_data['refresh'] = $rr->refresh;
+            $rr_data['retry'] = $rr->retry;
+            $rr_data['expire'] = $rr->expire;
+            $rr_data['minimum-ttl'] = $rr->minimum;
+        }
+        if ($type === DNS_TXT) {
+            // When response is a CNAME
+            if (property_exists($rr, 'text')) {
+                $rr_data['txt'] = implode("", $rr->text);
+                $rr_data['entries'] = $rr->text;
+            } else {
+                // Switch to the native since it recurses better,
+                // but save the corrected TTL
+                $temp = dns_get_record($rr->cname, $type);
+
+                // $query_response = $dns_resolver->query($rr->cname, dns_type_to_string($type));
+                // $temp2 = netdns2_to_native($query_response, $type);
+
+                if (count($temp)) {
+                    $rr_data = $temp[0];
+                    $rr_data['ttl'] = $rr->ttl;
+                } else {
+                    // Sometimes it won't give a response for whatever reason (_acme-challenge.nsone.net)
+                    $rr_data['host'] = $rr->cname;
+                    $rr_data['txt'] = '?';
+                    $rr_data['type'] = 'TXT';
+                    $rr_data['entries'] = [];
+                }
+            }
+        }
+        if ($type === DNS_AAAA) {
+            // When response is a CNAME
+            if (property_exists($rr, 'address')) {
+                $rr_data['ipv6'] = $rr->address;
+            } else {
+                // Can't find evidence where this is allowed
+                break;
+            }
+        }
+        if ($type === DNS_SRV) {
+            $rr_data['pri'] = $rr->priority;
+            $rr_data['weight'] = $rr->weight;
+            $rr_data['port'] = $rr->port;
+            $rr_data['target'] = $rr->target;
+        }
+        if ($type === DNS_NAPTR) {
+            $rr_data['order'] = $rr->order;
+            $rr_data['pref'] = $rr->preference;
+            $rr_data['flags'] = $rr->flags;
+            $rr_data['services'] = $rr->services;
+            $rr_data['regex'] = $rr->regexp;
+            $rr_data['replacement'] = $rr->replacement;
+        }
+        if ($type === DNS_DNSKEY) {
+            $rr_data['flags'] = $rr->flags;
+            $rr_data['protocol'] = $rr->protocol;
+            $rr_data['algorithm'] = $rr->algorithm;
+            $rr_data['key'] = $rr->key;
+        }
+        if ($type === DNS_DS) {
+            $rr_data['keytag'] = $rr->keytag;
+            $rr_data['algorithm'] = $rr->algorithm;
+            $rr_data['digesttype'] = $rr->digesttype;
+            $rr_data['digest'] = $rr->digest;
+        }
+        $result[] = $rr_data;
+    }
+
+    return $result;
+}
+
 function get_dns_record($host, $type)
 {
     global $dns_cache, $dns_count, $tld_dns_resolver, $arpa_dns_resolver, $dns_resolver;
     if (!isset($dns_cache[$host])) {
-        $dns_cache[$host] = array();
+        $dns_cache[$host] = [];
     }
 
     if (!isset($dns_cache[$host][$type])) {
@@ -73,54 +252,7 @@ function get_dns_record($host, $type)
         // https://github.com/hostinger/php-dig
         // composer require hostinger/php-dig
 
-        $type_string = '';
-        switch ($type) {
-            case DNS_A:
-                $type_string = 'A';
-                break;
-            case DNS_CNAME:
-                $type_string = 'CNAME';
-                break;
-            case DNS_HINFO:
-                $type_string = 'HINFO';
-                break;
-            case DNS_CAA:
-                $type_string = 'CAA';
-                break;
-            case DNS_MX:
-                $type_string = 'MX';
-                break;
-            case DNS_NS:
-                $type_string = 'NS';
-                break;
-            case DNS_PTR:
-                $type_string = 'PTR';
-                break;
-            case DNS_SOA:
-                $type_string = 'SOA';
-                break;
-            case DNS_TXT:
-                $type_string = 'TXT';
-                break;
-            case DNS_AAAA:
-                $type_string = 'AAAA';
-                break;
-            case DNS_SRV:
-                $type_string = 'SRV';
-                break;
-            case DNS_NAPTR:
-                $type_string = 'NAPTR';
-                break;
-            case DNS_A6:
-                $type_string = 'A6';
-                break;
-            case DNS_DNSKEY:
-                $type_string = 'DNSKEY';
-                break;
-            case DNS_DS:
-                $type_string = 'DS';
-                break;
-        }
+        $type_string = dns_type_to_string($type);
 
         // Save some time if we're only doing a rDNS
         // error_log($host . ' ' . $type_string);
@@ -131,129 +263,40 @@ function get_dns_record($host, $type)
         } else {
             try {
                 $resolver = $dns_resolver;
+                // Use different resolvers forced to use different nameservers
                 if ($type === DNS_DS) $resolver = $tld_dns_resolver;
                 if ($type === DNS_PTR) $resolver = $arpa_dns_resolver;
 
                 $query_response = $resolver->query($host, $type_string);
-                $result = [];
-
-                foreach ($query_response->answer as $rr) {
-                    $rr->rdata = '';
-
-                    // if ($type_string != $rr->type) {
-                    // error_log($type_string . ' != ' . $rr->type);
-                    // error_log(print_r($rr, true));
-                    // $test = dns_get_record($host, $type);
-                    // error_log(print_r($test, true));
-                    // }
-
-                    $rr_data = [
-                        'host' => $rr->name,
-                        'class' => $rr->class,
-                        'ttl' => $rr->ttl,
-                        'type' => $rr->type,
-                    ];
-                    if ($type === DNS_A) {
-                        $rr_data['ip'] = $rr->address;
-                    }
-                    if ($type === DNS_CNAME) {
-                        $rr_data['target'] = $rr->cname;
-                    }
-                    if ($type === DNS_CAA) {
-                        $rr_data['flags'] = $rr->flags;
-                        $rr_data['tag'] = $rr->tag;
-                        $rr_data['value'] = $rr->value;
-                    }
-                    if ($type === DNS_MX) {
-                        $rr_data['pri'] = $rr->preference;
-                        $rr_data['target'] = $rr->exchange;
-                    }
-                    if ($type === DNS_NS) {
-                        $rr_data['target'] = $rr->nsdname;
-                    }
-                    if ($type === DNS_PTR) {
-                        $rr_data['target'] = $rr->ptrdname;
-                    }
-                    if ($type === DNS_SOA) {
-                        $rr_data['mname'] = $rr->mname;
-                        $rr_data['rname'] = $rr->rname;
-                        $rr_data['serial'] = $rr->serial;
-                        $rr_data['refresh'] = $rr->refresh;
-                        $rr_data['retry'] = $rr->retry;
-                        $rr_data['expire'] = $rr->expire;
-                        $rr_data['minimum-ttl'] = $rr->minimum;
-                    }
-                    if ($type === DNS_TXT) {
-
-                        // When TXT is a CNAME
-                        if (property_exists($rr, 'text')) {
-                            $rr_data['txt'] = implode("", $rr->text);
-                            $rr_data['entries'] = $rr->text;
-                        } else {
-                            // error_log(print_r($rr, true));
-                            // error_log("dns_get_record({$rr->cname}, {$type})");
-                            // Switch to the native since it recurses better,
-                            // but save the corrected TTL
-                            $temp = dns_get_record($rr->cname, $type);
-                            // error_log(print_r($temp, true));
-
-                            // error_log("get_dns_record({$rr->cname}, {$rr->type})");
-                            $temp2 = get_dns_record($rr->cname, $rr->type);
-                            // error_log(print_r($temp2, true));
-
-                            if (count($temp)) {
-                                $rr_data = $temp[0];
-                                $rr_data['ttl'] = $rr->ttl;
-                            } else {
-                                // Sometimes it won't give a response for whatever reason (_acme-challenge.nsone.net)
-                                $rr_data['host'] = $rr->cname;
-                                $rr_data['txt'] = '?';
-                                $rr_data['type'] = 'TXT';
-                                $rr_data['entries'] = [];
-                            }
-                        }
-                    }
-                    if ($type === DNS_AAAA) {
-                        $rr_data['ipv6'] = $rr->address;
-                    }
-                    if ($type === DNS_SRV) {
-                        $rr_data['pri'] = $rr->priority;
-                        $rr_data['weight'] = $rr->weight;
-                        $rr_data['port'] = $rr->port;
-                        $rr_data['target'] = $rr->target;
-                    }
-                    if ($type === DNS_NAPTR) {
-                        $rr_data['order'] = $rr->order;
-                        $rr_data['pref'] = $rr->preference;
-                        $rr_data['flags'] = $rr->flags;
-                        $rr_data['services'] = $rr->services;
-                        $rr_data['regex'] = $rr->regexp;
-                        $rr_data['replacement'] = $rr->replacement;
-                    }
-                    if ($type === DNS_DNSKEY) {
-                        $rr_data['flags'] = $rr->flags;
-                        $rr_data['protocol'] = $rr->protocol;
-                        $rr_data['algorithm'] = $rr->algorithm;
-                        $rr_data['key'] = $rr->key;
-                    }
-                    if ($type === DNS_DS) {
-                        $rr_data['keytag'] = $rr->keytag;
-                        $rr_data['algorithm'] = $rr->algorithm;
-                        $rr_data['digesttype'] = $rr->digesttype;
-                        $rr_data['digest'] = $rr->digest;
-                    }
-                    $result[] = $rr_data;
-                }
+                $result = netdns2_to_native($query_response, $type);
             } catch (Net_DNS2_Exception $e) {
                 // Skip
                 $error_message = $e->getMessage();
-                if (!str_contains($error_message, 'The domain name referenced in the query does not exist')) {
+                if (str_contains($error_message, 'The name server refuses to perform the specified operation for policy reasons.')) {
+                    // Try again, wait 50ms
+                    // usleep(50 * 1000);
+                    sleep(1);
+
+                    try {
+                        $query_response = $resolver->query($host, $type_string);
+                        $result = netdns2_to_native($query_response, $type);
+                    } catch (Net_DNS2_Exception $e) {
+                        // Skip
+                        $error_message2 = $e->getMessage();
+                        error_log("get_dns_record()3: " . $host . ', ' . $type_string);
+                        error_log("get_dns_record()4: " . $error_message2);
+                        // Bail, just use built-in and kill the erroneous TTL
+                        $result = dns_get_record($host, $type);
+                    }
+                } else if (!str_contains($error_message, 'The domain name referenced in the query does not exist')) {
                     error_log("get_dns_record()1: " . $host . ', ' . $type_string);
                     error_log("get_dns_record()2: " . $error_message);
-                    // error_log(print_r($e, true));
+                    // Bail, just use built-in and kill the erroneous TTL
+                    $result = dns_get_record($host, $type);
+                    if (isset($result[0])) $result[0]['ttl'] = 999;
+                } else {
+                    $result = false;
                 }
-                // $result = dns_get_record($host, $type);
-                $result = false;
             }
         }
         // error_log(print_r($result, true));
@@ -321,7 +364,7 @@ function get_tld($domain2)
     $parts = explode('.', $domain2);
 
     // return '.' . $parts[count($parts) - 1];
-    return $parts[count($parts) - 1];
+    return $parts[count($parts) - 1] . '.';
 }
 
 function whois_request($hostname, $server)
@@ -570,22 +613,22 @@ function get_spf($records)
     foreach ($records as $record) {
         if (isset($record['entries'])) $record['txt'] = implode('', $record['entries']);
         if (isset($record['txt']) && strpos($record['txt'], 'v=spf') !== false) {
-            if ($spf === false) $spf = array();
-            $result = array();
+            if ($spf === false) $spf = [];
+            $result = [];
             $result['raw'] = trim($record['txt']);
             $parts = explode(' ', $result['raw']);
-            $result['pass'] = array();
-            $result['fail'] = array();
-            $result['softfail'] = array();
-            $result['neutral'] = array();
+            $result['pass'] = [];
+            $result['fail'] = [];
+            $result['softfail'] = [];
+            $result['neutral'] = [];
 
             array_shift($parts); // remove v=spf1
             foreach ($parts as $part) {
-                if (strpos($part, '+') !== false) {
+                if (str_starts_with($part, '+') !== false) {
                     $result['pass'][] = $part;
-                } elseif (strpos($part, '-') !== false) {
+                } elseif (str_starts_with($part, '-') !== false) {
                     $result['fail'][] = $part;
-                } elseif (strpos($part, '~') !== false) {
+                } elseif (str_starts_with($part, '~') !== false) {
                     $result['softfail'][] = $part;
                 } else {
                     if (strpos($part, '=') !== false && (strpos($part, 'exp=') === false || strpos($part, 'redirect=') === false)) {
@@ -617,9 +660,9 @@ function get_dkim_single($selector, $domain)
 
         // Sometimes they don't have v=DKIM
         if (strpos($record['txt'], 'v=DKIM') !== false || strpos($record['txt'], 'k=rsa') !== false) {
-            if ($dkim === false) $dkim = array();
+            if ($dkim === false) $dkim = [];
 
-            $result = array();
+            $result = [];
             $result['host'] = $host;
             // Some services like SendGrid will return a CNAME if you ask for TXT in order
             // to map it dynamically
@@ -723,8 +766,8 @@ function get_dmarc($domain)
     foreach ($records as $record) {
         if (isset($record['entries'])) $record['txt'] = implode('', $record['entries']);
         if (strpos($record['txt'], 'v=DMARC') !== false) {
-            if ($dmarc === false) $dmarc = array();
-            $result = array();
+            if ($dmarc === false) $dmarc = [];
+            $result = [];
             $result['raw'] = $record;
             $parts = explode(';', trim($record['txt']));
             foreach ($parts as $part) {
@@ -750,7 +793,7 @@ function get_dmarc($domain)
 function get_arin($ip)
 {
     global $arin_count, $errors;
-    $result = array();
+    $result = [];
 
     // Invalid IP
     if (false === $ip) return false;
@@ -801,7 +844,7 @@ function get_arin($ip)
     $result['registration_date'] = $result['raw_id']->net->registrationDate->{'$'};
     $netblock_data = $result['raw_id']->net->netBlocks->netBlock;
 
-    $result['net_block'] = array();
+    $result['net_block'] = [];
     if (is_array($netblock_data)) {
         foreach ($netblock_data as $netblock) {
             $result['net_block'][] = array(
@@ -834,7 +877,7 @@ function get_arin($ip)
     $result['customer_postal_code'] = $result['raw_customer']->{$org_customer}->postalCode->{'$'};
     if (is_array($result['raw_customer']->{$org_customer}->streetAddress->line)) {
 
-        $streetAddress = array();
+        $streetAddress = [];
         foreach ($result['raw_customer']->{$org_customer}->streetAddress->line as $line) {
             $streetAddress[] = $line->{'$'};
         }
@@ -1035,7 +1078,7 @@ function write_spf_table($domain, $current_ip, $current_ip_info, $spf, $type)
         //echo "<h4>{$type}</h4>";
         //echo "<table class=\"records\">";
         foreach ($spf[$type] as $spf_item) {
-            $spf_item = str_replace(array('+', '-', '~', '"'), '', $spf_item);
+            $spf_item = preg_replace('/^(\+|\-|\~|\")/', '', $spf_item);
 
             // Network/Domain with prefix
             // ip4:192.168.0.1/16
@@ -1211,7 +1254,7 @@ function seconds_to_time($seconds)
     $hours = floor(fmod($seconds / 3600, 24));
     $mins = floor(fmod($seconds / 60, 60));
     $secs = floor($seconds % 60);
-    $result = array();
+    $result = [];
     if ($year > 0) $result[] = $year . 'y';
     if ($day > 0) $result[] = $day . 'd';
     if ($hours > 0) $result[] = $hours . 'h';
@@ -1257,8 +1300,8 @@ function get_location_address($location)
 
 function array_merge_unique($array1, $array2)
 {
-    $index = array();
-    $result = array();
+    $index = [];
+    $result = [];
     $arrays = array($array1, $array2);
 
     // Go through both arrays
@@ -1315,7 +1358,8 @@ $0.50 USD / 1,000 additional map loads, up to 100,000 daily, if billing is enabl
 // CAA caatest.co.uk
 // DNSKEY cloudflare.com
 // DS cloudflare.com must ask parent zone nameserver
-$domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : 'google.com';
+// wildcards everything accuaudits.com
+$domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : 'caatest.co.uk';
 $line_breaks = array("\r", "\n");
 $domain = get_clean_domain($domain);
 $root_domain = get_root_domain($domain);
@@ -1374,6 +1418,8 @@ $now = time();
 $date_now = new DateTime();
 $date_now->setTimestamp($now);
 
+// Windows PHP bug https://bugs.php.net/bug.php?id=75909
+if (!defined('DNS_CAA')) define('DNS_CAA', 8192);
 define('DNS_DNSKEY', 1000);
 define('DNS_DS', 1001);
 
@@ -1393,6 +1439,39 @@ $dns_records = array(
     'srv' => get_dns_record($domain, DNS_SRV),
     'naptr' => get_dns_record($domain, DNS_NAPTR)
 );
+
+function merge_unique_ip(bool $is_wildcard, array $wildcard_ips, array  &$dns_records, array $a_record)
+{
+    if ($is_wildcard) {
+        if (!in_array($a_record[0]['ip'], $wildcard_ips)) {
+            $dns_records['a'] = array_merge_unique($dns_records['a'], $a_record);
+        }
+    } else {
+        $dns_records['a'] = array_merge_unique($dns_records['a'], $a_record);
+    }
+}
+
+function merge_unique_cname(bool $is_wildcard, array $wildcard_targets, array  &$dns_records, array $cname_record)
+{
+    if ($is_wildcard) {
+        if (!in_array($cname_record[0]['target'], $wildcard_targets)) {
+            $dns_records['cname'] = array_merge_unique($dns_records['cname'], $cname_record);
+        }
+    } else {
+        $dns_records['cname'] = array_merge_unique($dns_records['cname'], $cname_record);
+    }
+}
+
+function merge_unique_txt(bool $is_wildcard, array $wildcard_targets, array  &$dns_records, array $txt_record)
+{
+    if ($is_wildcard) {
+        if (!in_array($txt_record[0]['cname'], $wildcard_targets)) {
+            $dns_records['txt'] = array_merge_unique($dns_records['txt'], $txt_record);
+        }
+    } else {
+        $dns_records['txt'] = array_merge_unique($dns_records['txt'], $txt_record);
+    }
+}
 
 function check_default_records(&$dns_records, $domain)
 {
@@ -1428,13 +1507,7 @@ function check_default_records(&$dns_records, $domain)
     foreach ($default_subdomains as $subdomain) {
         $a_record = get_dns_record("{$subdomain}.{$domain}", DNS_A);
         if (isset($a_record[0])) {
-            if ($is_wildcard) {
-                if (!in_array($a_record[0]['ip'], $wildcard_ips)) {
-                    $dns_records['a'] = array_merge_unique($dns_records['a'], $a_record);
-                }
-            } else {
-                $dns_records['a'] = array_merge_unique($dns_records['a'], $a_record);
-            }
+            merge_unique_ip($is_wildcard, $wildcard_ips, $dns_records, $a_record);
         } else {
             // sometimes a CNAME will return nothing
             //error_log("${subdomain}.${domain}");
@@ -1442,28 +1515,9 @@ function check_default_records(&$dns_records, $domain)
         }
     }
 
-    // If this is a c_name, it will return a lot of junk we don't want, so we check if it's related to the domain
-    // $autodiscover = get_dns_record('autodiscover.' . $domain, DNS_A);
-    // if ($autodiscover && strpos($autodiscover[0]['host'], 'autodiscover.' . $domain) !== false) {
-    //     $a_record = get_dns_record('autodiscover.' . $domain, DNS_A);
-    //     if (isset($a_record[0])) {
-    //         if ($is_wildcard) {
-    //             if (!in_array($a_record[0]['ip'], $wildcard_ips)) {
-    //                 $dns_records['a'] = array_merge_unique($dns_records['a'], $a_record);
-    //             }
-    //         } else {
-    //             $dns_records['a'] = array_merge_unique($dns_records['a'], $a_record);
-    //         }
-    //     } else {
-    //         // sometimes a CNAME will return nothing
-    //         //error_log("${subdomain}.${domain}");
-    //         //error_log(print_r($a_record, true));
-    //     }
-    // }
-
     // Check CNAME record wildcard
-    $wildcard_record = get_dns_record("mariani-is-cool.{$domain}", DNS_CNAME);
-    $is_wildcard = count($wildcard_record) > 0 ? true : false;
+    $wildcard_records = get_dns_record("mariani-is-cool.{$domain}", DNS_CNAME);
+    $is_wildcard = count($wildcard_records) > 0 ? true : false;
     $wildcard_targets = [];
     if ($is_wildcard) {
         foreach ($wildcard_records as &$wildcard_record) {
@@ -1480,13 +1534,7 @@ function check_default_records(&$dns_records, $domain)
     foreach ($default_subdomains as $subdomain) {
         $cname_record = get_dns_record("{$subdomain}.{$domain}", DNS_CNAME);
         if (isset($cname_record[0])) {
-            if ($is_wildcard) {
-                if (!in_array($cname_record[0]['target'], $wildcard_targets)) {
-                    $dns_records['cname'] = array_merge_unique($dns_records['cname'], $cname_record);
-                }
-            } else {
-                $dns_records['cname'] = array_merge_unique($dns_records['cname'], $cname_record);
-            }
+            merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, $cname_record);
         } else {
             // sometimes a CNAME will return nothing
             //error_log("${subdomain}.${domain}");
@@ -1512,53 +1560,53 @@ function check_default_records(&$dns_records, $domain)
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_carddav._tcp.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_carddavs._tcp.' . $domain, DNS_SRV));
 
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('_caldav._tcp.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('_caldavs._tcp.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('_carddav._tcp.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('_carddavs._tcp.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('default._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_caldav._tcp.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_caldavs._tcp.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_carddav._tcp.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_carddavs._tcp.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('default._domainkey.' . $domain, DNS_TXT));
     // cPanel
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('_cpanel-dcv-test-record.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('_acme-challenge.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_cpanel-dcv-test-record.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_acme-challenge.' . $domain, DNS_TXT));
     // Google
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('google._domainkey.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('ga1._domainkey.' . $domain, DNS_TXT));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('google._domainkey.' . $domain, DNS_CNAME));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('ga1._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('google._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('ga1._domainkey.' . $domain, DNS_TXT));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('google._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('ga1._domainkey.' . $domain, DNS_CNAME));
     // MS 365
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('selector1._domainkey.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('selector2._domainkey.' . $domain, DNS_TXT));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('selector1._domainkey.' . $domain, DNS_CNAME));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('selector2._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('selector1._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('selector2._domainkey.' . $domain, DNS_TXT));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('selector1._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('selector2._domainkey.' . $domain, DNS_CNAME));
     // Mailchimp
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('k1._domainkey.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('k2._domainkey.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('k3._domainkey.' . $domain, DNS_TXT));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('k1._domainkey.' . $domain, DNS_CNAME));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('k2._domainkey.' . $domain, DNS_CNAME));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('k3._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k1._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k2._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k3._domainkey.' . $domain, DNS_TXT));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k1._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k2._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k3._domainkey.' . $domain, DNS_CNAME));
     // Cloudflare
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('_cf-custom-hostname.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_cf-custom-hostname.' . $domain, DNS_TXT));
     // Campaign Monitor
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('cm._domainkey.' . $domain, DNS_TXT));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('cm._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('cm._domainkey.' . $domain, DNS_TXT));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('cm._domainkey.' . $domain, DNS_CNAME));
     // MXRoute
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('x._domainkey.' . $domain, DNS_TXT));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('x._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('x._domainkey.' . $domain, DNS_TXT));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('x._domainkey.' . $domain, DNS_CNAME));
     // Mailgun
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('smtp._domainkey.' . $domain, DNS_TXT));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('smtp._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('smtp._domainkey.' . $domain, DNS_TXT));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('smtp._domainkey.' . $domain, DNS_CNAME));
     // turboSMTP
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('turbo-smtp._domainkey.' . $domain, DNS_TXT));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('turbo-smtp._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('turbo-smtp._domainkey.' . $domain, DNS_TXT));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('turbo-smtp._domainkey.' . $domain, DNS_CNAME));
     // SendGrid
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('s1._domainkey.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('s2._domainkey.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('m1._domainkey.' . $domain, DNS_TXT));
-    $dns_records['txt'] = array_merge_unique($dns_records['txt'], get_dns_record('smtpapi._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('s1._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('s2._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('m1._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('smtpapi._domainkey.' . $domain, DNS_TXT));
     // HubSpot
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('hs1._domainkey.' . $domain, DNS_CNAME));
-    $dns_records['cname'] = array_merge_unique($dns_records['cname'], get_dns_record('hs2._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('hs1._domainkey.' . $domain, DNS_CNAME));
+    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('hs2._domainkey.' . $domain, DNS_CNAME));
 
     // If a CNAME exists for a matching A or TXT record, remove them as only the CNAME should exist
     foreach ($dns_records['cname'] as $cname_record) {
@@ -1576,10 +1624,12 @@ function check_default_records(&$dns_records, $domain)
     }
 }
 // error_log('check_default_records');
+$country_tlds = ['co.uk'];
+
 // Check any default subdomains
 check_default_records($dns_records, $domain);
 // If we are working with a subdomain, merge in the parent/root domains records
-if (!$is_root_domain) {
+if (!$is_root_domain && !in_array($root_domain, $country_tlds)) {
     check_default_records($dns_records, $root_domain);
 }
 
@@ -1594,13 +1644,13 @@ $spf_records = get_spf($dns_records['txt']);
 // error_log('get_dkim');
 $dkim_records = get_dkim($domain);
 // error_log(print_r($dkim_records, true));
-$dns_records['dkim'] = array();
+$dns_records['dkim'] = [];
 foreach ($dkim_records as $dkim) {
     $dns_records['dkim'][] = $dkim['raw'];
 }
 // error_log('get_dmarc');
 $dmarc_records = get_dmarc($domain);
-$dns_records['dmarc'] = array();
+$dns_records['dmarc'] = [];
 foreach ($dmarc_records as $dmarc) {
     $dns_records['dmarc'][] = $dmarc['raw'];
 }
@@ -2045,7 +2095,7 @@ function translate_org($org)
 
                                 <dt class="col-sm-4">Name Server Provider</dt>
                                 <dd class="col-sm-8"><?php
-                                                        $email_host = array();
+                                                        $email_host = [];
                                                         foreach ($dns_records['ns'] as $record) {
                                                             $uri = strtolower($record['target']);
                                                             // use unique index so we auto filter duplicates
@@ -2118,7 +2168,7 @@ function translate_org($org)
 
                                 <dt class="col-sm-4">Email Provider</dt>
                                 <dd class="col-sm-8"><?php
-                                                        $email_host = array();
+                                                        $email_host = [];
                                                         $email_target = null;
                                                         $is_spam_filter = false;
 
@@ -2194,7 +2244,7 @@ function translate_org($org)
 
                                                         // If behind a mail filter, try to find the origin
                                                         if ($is_spam_filter) {
-                                                            $email_host = array();
+                                                            $email_host = [];
                                                             foreach ($dns_records['a'] as $record) {
                                                                 $uri = strtolower($record['host']);
                                                                 $ip = $record['ip'];
@@ -2445,6 +2495,7 @@ function translate_org($org)
                                     $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['target']}.\n";
 
                                     $ip = get_host_by_name($record['target']);
+                                    // error_log($ip . ' - ' . $record['target']);
                                     $ip_info = get_location($ip);
                                 ?>
                                     <tr>
@@ -2544,26 +2595,28 @@ function translate_org($org)
                                         <td data-bs-toggle="tooltip" data-bs-title="Algorithm - <?= $algo_label ?>"><?php echo $record['algorithm']; ?></td>
                                         <td data-bs-toggle="tooltip" data-bs-title="Public Key" colspan="4"><code><?php echo $record['key']; ?></code></td>
                                     </tr>
-                                <?php
+                                    <?php
                                 }
                                 if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "\n";
 
-                                if (count($dns_records['caa']) > 0) $zoneExportRaw .= "; CAA Record\n";
-                                foreach ($dns_records['caa'] as $record) {
-                                    $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['flags']}\t{$record['tag']}\t\"{$record['value']}\"\n";
-                                ?>
-                                    <tr>
-                                        <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
-                                        <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
-                                        <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
-                                        <td data-bs-toggle="tooltip" data-bs-title="Certification Authority Authorization"><?php echo $record['type']; ?></td>
-                                        <td data-bs-toggle="tooltip" data-bs-title="Flags"><?php echo $record['flags']; ?></td>
-                                        <td data-bs-toggle="tooltip" data-bs-title="Tag"><?php echo $record['tag']; ?></td>
-                                        <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="5"><code><?php echo $record['value']; ?></code></td>
-                                    </tr>
-                                <?php
+                                if (isset($dns_records['caa'])) {
+                                    if (count($dns_records['caa']) > 0) $zoneExportRaw .= "; CAA Record\n";
+                                    foreach ($dns_records['caa'] as $record) {
+                                        $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['flags']}\t{$record['tag']}\t\"{$record['value']}\"\n";
+                                    ?>
+                                        <tr>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Internet"><?php echo $record['class']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Certification Authority Authorization"><?php echo $record['type']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Flags"><?php echo $record['flags']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Tag"><?php echo $record['tag']; ?></td>
+                                            <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="5"><code><?php echo $record['value']; ?></code></td>
+                                        </tr>
+                                    <?php
+                                    }
+                                    if (count($dns_records['caa']) > 0) $zoneExportRaw .= "\n";
                                 }
-                                if (count($dns_records['caa']) > 0) $zoneExportRaw .= "\n";
 
                                 if (count($dns_records['mx']) > 0) $zoneExportRaw .= "; MX Record\n";
                                 foreach ($dns_records['mx'] as $record) {
@@ -2578,7 +2631,7 @@ function translate_org($org)
                                             $server_locations[$ip_info->loc] = array(array('type' => 'EMail Server', 'info' => $ip_info));
                                         }
                                     }
-                                ?>
+                                    ?>
                                     <tr>
                                         <td data-bs-toggle="tooltip" data-bs-title="Host"><?php echo $record['host']; ?></td>
                                         <td data-bs-toggle="tooltip" data-bs-title="TTL - <?php echo seconds_to_time($record['ttl']); ?>"><?php echo $record['ttl']; ?></td>
@@ -2969,7 +3022,7 @@ function translate_org($org)
                             echo "<dt class=\"col-sm-3\">Content Type Options</dt><dd class=\"col-sm-9\">" . val_to_string($headers["X-Content-Type-Options"]) . "</dd>";
                         }
                         if (!$hasAnyHeaders) {
-                            echo "<dt class=\"col-sm-3\"></dt><dd class=\"col-sm-9\">No related headers found</dd>";
+                            echo "<dt class=\"col-sm-3\"></dt><dd class=\"col-sm-9\">No security related headers found</dd>";
                         }
                         ?>
                     </dl>
@@ -3038,17 +3091,25 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
                     <div class="bd-group row">
                         <h3 class="bg-group-section-title col-sm-3">Subject Name</h3>
                         <dl class="row">
-                            <dt class="col-sm-3">Country</dt>
-                            <dd class="col-sm-9"><?= $cert['subject']['C'] ?></dd>
+                            <?php if (isset($cert['subject']['C'])) { ?>
+                                <dt class="col-sm-3">Country</dt>
+                                <dd class="col-sm-9"><?= $cert['subject']['C'] ?></dd>
+                            <?php } ?>
 
-                            <dt class="col-sm-3">State/Province</dt>
-                            <dd class="col-sm-9"><?= $cert['subject']['ST'] ?></dd>
+                            <?php if (isset($cert['subject']['ST'])) { ?>
+                                <dt class="col-sm-3">State/Province</dt>
+                                <dd class="col-sm-9"><?= $cert['subject']['ST'] ?></dd>
+                            <?php } ?>
 
-                            <dt class="col-sm-3">Locality</dt>
-                            <dd class="col-sm-9"><?= $cert['subject']['L'] ?></dd>
+                            <?php if (isset($cert['subject']['L'])) { ?>
+                                <dt class="col-sm-3">Locality</dt>
+                                <dd class="col-sm-9"><?= $cert['subject']['L'] ?></dd>
+                            <?php } ?>
 
-                            <dt class="col-sm-3">Organization</dt>
-                            <dd class="col-sm-9"><?= $cert['subject']['O'] ?></dd>
+                            <?php if (isset($cert['subject']['O'])) { ?>
+                                <dt class="col-sm-3">Organization</dt>
+                                <dd class="col-sm-9"><?= $cert['subject']['O'] ?></dd>
+                            <?php } ?>
 
                             <dt class="col-sm-3">Common Name</dt>
                             <dd class="col-sm-9"><?= $cert['subject']['CN'] ?></dd>
@@ -3202,65 +3263,99 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
                     </div>
                 <?php
                 } else {
-                    echo '<p>No SSL/TLS certificate found</p>';
+                    echo '<div class="bd-group row"><dl class="row">';
+                    echo "<dt class=\"col-sm-3\"></dt><dd class=\"col-sm-9\">No SSL/TLS certificate found</dd>";
+                    echo '</dl></div>';
                 }
                 ?>
             </section>
 
             <section id="email-tab-pane" class="tab-pane fade" role="tabpanel" aria-labelledby="email-tab" tabindex="0">
-                <h2 class="display-5"><abbr title="Sender Policy Framework">SPF</abbr> Records</h2>
-                <?php
-                if ($spf_records) {
-                    $count = 1;
-                ?>
-                    <table class="table table-dark table-striped records">
-                        <thead>
-                            <tr>
-                                <th>Action</th>
-                                <th>Mechanism/Address</th>
-                                <th>Host/IP/Value</th>
-                                <th>Location</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php
-                        foreach ($spf_records as $spf) {
-                            write_spf_table($domain, $ip, $location, $spf, 'pass');
-                            write_spf_table($domain, $ip, $location, $spf, 'neutral');
-                            write_spf_table($domain, $ip, $location, $spf, 'softfail');
-                            write_spf_table($domain, $ip, $location, $spf, 'fail');
-                            $count++;
+                <h2 class="display-5 mt-5 bd-group-title"><abbr title="Sender Policy Framework">SPF</abbr> Records</h2>
+                <div class="bd-group row">
+                    <?php
+                    if ($spf_records) {
+                        $count = 1;
+                    ?>
+                        <table class="table table-dark table-striped records">
+                            <thead>
+                                <tr>
+                                    <th>Action</th>
+                                    <th>Mechanism/Address</th>
+                                    <th>Host/IP/Value</th>
+                                    <th>Location</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php
+                            foreach ($spf_records as $spf) {
+                                write_spf_table($domain, $ip, $location, $spf, 'pass');
+                                write_spf_table($domain, $ip, $location, $spf, 'neutral');
+                                write_spf_table($domain, $ip, $location, $spf, 'softfail');
+                                write_spf_table($domain, $ip, $location, $spf, 'fail');
+                                $count++;
+                            }
+                            echo '</tbody></table>';
+                        } else {
+                            echo '<p>None</p>';
                         }
-                        echo '</tbody></table>';
-                    } else {
-                        echo '<p>None</p>';
-                    }
-                        ?>
+                            ?>
+                </div>
 
-                        <h2 class="display-5"><abbr title="DomainKeys Identified Mail">DKIM</abbr> Records</h2>
+                <h2 class="display-5 mt-5 bd-group-title"><abbr title="DomainKeys Identified Mail">DKIM</abbr> Records</h2>
+
+                <div class="bd-group row">
+                    <p><em>Checks selectors: 'default' (cPanel), 'x' (MXRoute), 'smtp' (Mailgun), 'hs1, hs2' (HubSpot), 's1, s2, m1, smtpapi' (SendGrid), 'k1, k2, k3' (MailChimp), 'google, ga1' (Google), 'cm' (Campaign Monitor), 'selector1' & 'selector2' (Microsoft 365), 'turbo-smtp' (TurboSMTP)</em></p>
+                    <dl class="row">
                         <?php
                         // https://protodave.com/tools/dkim-key-checker/
                         if ($dkim_records) {
-                            echo "<p><em>Checks selectors: 'default' (cPanel), 'x' (MXRoute), 'smtp' (Mailgun), 'hs1, hs2' (HubSpot), 's1, s2, m1, smtpapi' (SendGrid), 'k1, k2, k3' (MailChimp), 'google, ga1' (Google), 'cm' (Campaign Monitor), 'selector1' & 'selector2' (Microsoft 365), 'turbo-smtp' (TurboSMTP)</em></p>";
-                            echo '<table class="table table-dark table-striped">';
+
+
                             foreach ($dkim_records as $dkim) {
                                 $alert = ($dkim['key_bits'] < 1024) ? ' INSECURE (<1024)' : '';
                                 if (isset($dkim['cname'])) $cname = " <abbr title='CNAME'>&rarr; {$dkim['cname']}</abbr>";
-                                echo "<tr><th>Selector</th><td>{$dkim['host']}{$cname}</td></tr>";
-                        ?>
-                                <tr>
-                                    <th width="275px;">Key Length (Bits)</th>
-                                    <td><?= $dkim['key_bits'] . $alert ?></td>
-                                </tr>
-                                <?php
+                                echo "<dt class=\"col-sm-3\">Selector</dt>";
+                                echo "<dd class=\"col-sm-9\">{$dkim['host']}{$cname}</dd>";
 
-                                if (isset($dkim['v'])) echo "<tr><th>Version</th><td>{$dkim['v']}</td></tr>";
-                                if (isset($dkim['g'])) echo "<tr><th>Key Granularity</th><td>{$dkim['g']}</td></tr>";
-                                if (isset($dkim['h'])) echo "<tr><th>Hash Algorithm</th><td>{$dkim['h']}</td></tr>";
-                                if (isset($dkim['k'])) echo "<tr><th>Key Type</th><td>" . strtoupper($dkim['k']) . "</td></tr>";
-                                if (isset($dkim['n'])) echo "<tr><th>Notes</th><td>{$dkim['n']}</td></tr>";
-                                //if (isset($dkim['p'])) echo "<tr><th>Public Key Data</th><td>{$dkim['p']}</td></tr>";
-                                if (isset($dkim['s'])) echo "<tr><th>Service Type</th><td>{$dkim['s']}</td></tr>";
+                                echo "<dt class=\"col-sm-3\">Key Size</dt>";
+                                echo "<dd class=\"col-sm-9\">{$dkim['key_bits']}{$alert} Bits</dd>";
+
+                                if (isset($dkim['v'])) {
+                                    echo "<dt class=\"col-sm-3\">Version</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dkim['v']}</dd>";
+                                }
+
+                                if (isset($dkim['g'])) {
+                                    echo "<dt class=\"col-sm-3\">Key Granularity</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dkim['g']}</dd>";
+                                }
+
+                                if (isset($dkim['h'])) {
+                                    echo "<dt class=\"col-sm-3\">Hash Algorithm</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dkim['h']}</dd>";
+                                }
+
+                                if (isset($dkim['k'])) {
+                                    echo "<dt class=\"col-sm-3\">Key Type</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dkim['k']}</dd>";
+                                }
+
+                                if (isset($dkim['n'])) {
+                                    echo "<dt class=\"col-sm-3\">Notes</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dkim['n']}</dd>";
+                                }
+
+                                // if (isset($dkim['p'])) {
+                                //     echo "<dt class=\"col-sm-3\">Public Key Data</dt>";
+                                //     echo "<dd class=\"col-sm-9\">{$dkim['p']}</dd>";
+                                // }
+
+                                if (isset($dkim['s'])) {
+                                    echo "<dt class=\"col-sm-3\">Service Type</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dkim['s']}</dd>";
+                                }
+
                                 if (isset($dkim['t'])) {
                                     // https://www.rfc-editor.org/rfc/rfc6376.html#section-3.6.1
                                     $flags = explode(';', $dkim['t']);
@@ -3274,59 +3369,88 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
                                         $flagsLabelArray[] = "<abbr title=\"{$explanation}\">{$flag}</abbr> ";
                                     }
                                     $flagsLabel = implode(' ', $flagsLabelArray);
-                                    echo "<tr><th>Flags</th><td>{$flagsLabel}</td></tr>";
-                                }
-                                ?>
-                                <tr>
-                                    <th>Public Key</th>
-                                    <td>
-                                        <div class="bd-code-snippet">
-                                            <div class="highlight">
-                                                <pre><?= $dkim['public_key'] . $alert ?></pre>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th>Raw</th>
-                                    <td>
-                                        <div class="bd-code-snippet">
-                                            <div class="highlight">
-                                                <pre style="max-width: 100%;word-break: break-all;white-space: break-spaces;"><?= $dkim['raw']['txt'] ?></pre>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                        <?php
-                            }
-                            echo '</table>';
-                        } else {
-                            echo '<p>None</p>';
-                        }
-                        ?>
 
-                        <h2 class="display-5"><abbr title="Domain-based Message Authentication, Reporting & Conformance">DMARC</abbr> Records</h2>
+                                    echo "<dt class=\"col-sm-3\">Flags</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$flagsLabel}</dd>";
+                                }
+
+                                echo "<dt class=\"col-sm-3\">Public Key</dt>";
+                                echo "<dd class=\"col-sm-9\"><div class=\"bd-code-snippet\"><div class=\"highlight\"><pre>{$dkim['public_key']}{$alert}</pre></div></div></dd>";
+
+                                echo "<dt class=\"col-sm-3\">Raw</dt>";
+                                echo "<dd class=\"col-sm-9\"><div class=\"bd-code-snippet\"><div class=\"highlight\"><pre>{$dkim['raw']['txt']}</pre></div></div></dd>";
+                            }
+                        } else {
+                            echo "<dt class=\"col-sm-3\"></dt><dd class=\"col-sm-9\">None</dd>";
+                        }
+
+                        ?>
+                    </dl>
+                </div>
+
+                <h2 class="display-5 mt-5 bd-group-title"><abbr title="Domain-based Message Authentication, Reporting & Conformance">DMARC</abbr> Records</h2>
+                <div class="bd-group row">
+                    <dl class="row">
                         <?php
                         // https://protodave.com/tools/dkim-key-checker/
                         if ($dmarc_records) {
-                            echo '<table class="table table-dark table-striped">';
                             foreach ($dmarc_records as $dmarc) {
-                                if (isset($dmarc['v'])) echo "<tr><th width=\"275px;\">Version</th><td>{$dmarc['v']}</td></tr>";
-                                if (isset($dmarc['pct'])) echo "<tr><th>Messages subject to filtering</th><td>{$dmarc['pct']}%</td></tr>";
-                                if (isset($dmarc['rf'])) echo "<tr><th>Failure Reports</th><td>{$dmarc['rf']}</td></tr>";
-                                if (isset($dmarc['ri'])) echo "<tr><th>Interval between Aggregate Reports</th><td>{$dmarc['ri']} seconds</td></tr>";
-                                if (isset($dmarc['ruf'])) echo "<tr><th>Send forensic reports to</th><td>{$dmarc['ruf']}</td></tr>";
-                                if (isset($dmarc['rua'])) echo "<tr><th>Send aggregate reports to</th><td>{$dmarc['rua']}</td></tr>";
-                                if (isset($dmarc['p'])) echo "<tr><th>Policy for domain</th><td>{$dmarc['p']}</td></tr>";
-                                if (isset($dmarc['sp'])) echo "<tr><th>Policy for subdomains</th><td>{$dmarc['sp']}</td></tr>";
-                                if (isset($dmarc['adkim'])) echo "<tr><th>Alignment mode for DKIM</th><td>{$dmarc['adkim']}</td></tr>";
-                                if (isset($dmarc['aspf'])) echo "<tr><th>Alignment mode for SPF</th><td>{$dmarc['aspf']}</td></tr>";
+                                if (isset($dmarc['v'])) {
+                                    echo "<dt class=\"col-sm-3\">Version</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['v']}</dd>";
+                                }
+
+                                if (isset($dmarc['pct'])) {
+                                    echo "<dt class=\"col-sm-3\">Messages subject to filtering</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['pct']}</dd>";
+                                }
+
+                                if (isset($dmarc['rf'])) {
+                                    echo "<dt class=\"col-sm-3\">Failure Reports</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['rf']}</dd>";
+                                }
+
+                                if (isset($dmarc['ri'])) {
+                                    echo "<dt class=\"col-sm-3\">Interval between Aggregate Reports</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['ri']}</dd>";
+                                }
+
+                                if (isset($dmarc['ruf'])) {
+                                    echo "<dt class=\"col-sm-3\">Send forensic reports to</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['ruf']}</dd>";
+                                }
+
+                                if (isset($dmarc['rua'])) {
+                                    echo "<dt class=\"col-sm-3\">Send aggregate reports to</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['rua']}</dd>";
+                                }
+
+                                if (isset($dmarc['p'])) {
+                                    echo "<dt class=\"col-sm-3\">Policy for domain</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['p']}</dd>";
+                                }
+
+                                if (isset($dmarc['sp'])) {
+                                    echo "<dt class=\"col-sm-3\">Policy for subdomains</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['sp']}</dd>";
+                                }
+
+                                if (isset($dmarc['adkim'])) {
+                                    echo "<dt class=\"col-sm-3\">Alignment mode for DKIM</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['adkim']}</dd>";
+                                }
+
+                                if (isset($dmarc['aspf'])) {
+                                    echo "<dt class=\"col-sm-3\">Alignment mode for SPF</dt>";
+                                    echo "<dd class=\"col-sm-9\">{$dmarc['aspf']}</dd>";
+                                }
                             }
-                            echo '</table>';
                         } else {
-                            echo '<p>None</p>';
+                            echo "<dt class=\"col-sm-3\"></dt><dd class=\"col-sm-9\">None</dd>";
                         }
                         ?>
+                    </dl>
+                </div>
             </section>
 
             <section id="map-tab-pane" class="tab-pane fade" role="tabpanel" aria-labelledby="map-tab" tabindex="0">
@@ -3396,12 +3520,12 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
 
         function initMapAll() {
             const servers = [<?php
-                                $js_servers = array();
+                                $js_servers = [];
                                 // error_log(print_r($server_locations, true));
                                 foreach ($server_locations as $location => $items) {
                                     $geoCoord = explode(',', $location);
-                                    $title = array();
-                                    $content = array();
+                                    $title = [];
+                                    $content = [];
                                     foreach ($items as $server) {
                                         $content[] = '<strong>' . $server['info']->org . '</strong> - <em>' . $server['type'] . '</em><br><strong>Host Name:</strong> ' . $server['info']->hostname . '<br><strong>IP:</strong> ' . $server['info']->ip;
                                         $title[] = $server['type'];
