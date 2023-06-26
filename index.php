@@ -149,7 +149,8 @@ function netdns2_to_native(Net_DNS2_Packet_Response $query_response, int $type)
         }
         if ($type === DNS_MX) {
             // When response is a CNAME
-            if (property_exists($rr, 'pri')) {
+            // error_log(print_r($rr, true));
+            if (property_exists($rr, 'preference')) {
                 $rr_data['pri'] = $rr->preference;
                 $rr_data['target'] = $rr->exchange;
             } else {
@@ -178,21 +179,29 @@ function netdns2_to_native(Net_DNS2_Packet_Response $query_response, int $type)
                 $rr_data['txt'] = implode("", $rr->text);
                 $rr_data['entries'] = $rr->text;
             } else {
+                // Return a CNAME instead
+                $rr_data['target'] = $rr->cname;
+
                 // Switch to the native since it recurses better,
                 // but save the corrected TTL
                 $temp = dns_get_record($rr->cname, $type);
+                // error_log('asdfasdf');
+                // error_log(print_r($temp, true));
 
-                // $query_response = $dns_resolver->query($rr->cname, dns_type_to_string($type));
-                // $temp2 = netdns2_to_native($query_response, $type);
+                // $query_response2 = $dns_resolver->query($rr->cname, dns_type_to_string($type));
+                // $temp2 = netdns2_to_native($query_response2, $type);
+                // error_log(print_r($temp2, true));
 
                 if (count($temp)) {
-                    $rr_data = $temp[0];
-                    $rr_data['ttl'] = $rr->ttl;
+                    // $rr_data = $temp[0];
+                    $rr_data['txt'] = $temp[0]['txt'];
+                    $rr_data['entries'] = $temp[0]['entries'];
+                    // $rr_data['ttl'] = $rr->ttl;
                 } else {
                     // Sometimes it won't give a response for whatever reason (_acme-challenge.nsone.net)
-                    $rr_data['host'] = $rr->cname;
-                    $rr_data['txt'] = '?';
-                    $rr_data['type'] = 'TXT';
+                    // $rr_data['host'] = $rr->cname;
+                    $rr_data['txt'] = '';
+                    // $rr_data['type'] = 'TXT';
                     $rr_data['entries'] = [];
                 }
             }
@@ -656,17 +665,22 @@ function get_dkim_single($selector, $domain)
     $txt_records = get_dns_record($host, DNS_TXT);
     // error_log(print_r($txt_records, true));
     foreach ($txt_records as $record) {
+        // Did we get a CNAME instead?
+        // if (isset($record['target'])) {
+        //     $txt_records = get_dns_record($record['target'], DNS_TXT);
+        // }
+
         if (isset($record['entries'])) $record['txt'] = implode('', $record['entries']);
 
         // Sometimes they don't have v=DKIM
-        if (strpos($record['txt'], 'v=DKIM') !== false || strpos($record['txt'], 'k=rsa') !== false) {
+        if (strpos($record['txt'] ?? '', 'v=DKIM') !== false || strpos($record['txt'] ?? '', 'k=rsa') !== false) {
             if ($dkim === false) $dkim = [];
 
             $result = [];
             $result['host'] = $host;
             // Some services like SendGrid will return a CNAME if you ask for TXT in order
             // to map it dynamically
-            if (isset($record['cname'])) $result['cname'] = $record['cname'];
+            if (isset($record['target'])) $result['cname'] = $record['target'];
             $result['raw'] = $record;
             $parts = explode(';', trim($record['txt']));
             foreach ($parts as $part) {
@@ -680,8 +694,8 @@ function get_dkim_single($selector, $domain)
             $result['public_key'] = sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----", wordwrap($result['p'], 64, "\n", true));
 
             $keyres = openssl_pkey_get_public($result['public_key']);
-            $key = openssl_pkey_get_details($keyres);
-            $result['key_bits'] = $key['bits'] ?? '?';
+            $key = $keyres ? openssl_pkey_get_details($keyres) : false;
+            $result['key_bits'] = $key ? ($key['bits'] ?? '?') : '?';
             // If RSA http://php.net/manual/en/function.openssl-pkey-get-details.php
             //$result['key_modulus'] = $key['n'];
             //$result['key_public_exponent'] = $key['e'];
@@ -711,6 +725,8 @@ function get_dkim($domain)
         get_dkim_single('turbo-smtp', $domain),
         get_dkim_single('s1', $domain),
         get_dkim_single('s2', $domain),
+        get_dkim_single('smt', $domain),
+        get_dkim_single('smt2', $domain),
         get_dkim_single('m1', $domain),
         get_dkim_single('smtpapi', $domain),
         get_dkim_single('hs1', $domain),
@@ -1359,7 +1375,7 @@ $0.50 USD / 1,000 additional map loads, up to 100,000 daily, if billing is enabl
 // DNSKEY cloudflare.com
 // DS cloudflare.com must ask parent zone nameserver
 // wildcards everything accuaudits.com
-$domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : 'mariani.life';
+$domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : 'google.com';
 $line_breaks = array("\r", "\n");
 $domain = get_clean_domain($domain);
 $root_domain = get_root_domain($domain);
@@ -1429,7 +1445,7 @@ $dns_records = array(
     //'hinfo' => get_dns_record( $domain, DNS_HINFO ),
     'dnskey' => get_dns_record($domain, DNS_DNSKEY),
     'ds' => get_dns_record($domain, DNS_DS),
-    'caa' => get_dns_record($domain, DNS_CAA), // PHP 7.1.2+
+    // 'caa' => get_dns_record($domain, DNS_CAA), // PHP 7.1.2+
     'mx' => get_dns_record($domain, DNS_MX),
     'ns' => get_dns_record($domain, DNS_NS),
     'ptr' => get_dns_record($arpa_host, DNS_PTR),
@@ -1464,12 +1480,16 @@ function merge_unique_cname(bool $is_wildcard, array $wildcard_targets, array  &
 
 function merge_unique_txt(bool $is_wildcard, array $wildcard_targets, array  &$dns_records, array $txt_record)
 {
-    if ($is_wildcard) {
-        if (!in_array($txt_record[0]['cname'], $wildcard_targets)) {
+    if ($txt_record[0]['type'] === 'CNAME') {
+        merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, $txt_record);
+    } else {
+        if ($is_wildcard) {
+            if (!in_array($txt_record[0]['cname'], $wildcard_targets)) {
+                $dns_records['txt'] = array_merge_unique($dns_records['txt'], $txt_record);
+            }
+        } else {
             $dns_records['txt'] = array_merge_unique($dns_records['txt'], $txt_record);
         }
-    } else {
-        $dns_records['txt'] = array_merge_unique($dns_records['txt'], $txt_record);
     }
 }
 
@@ -1481,12 +1501,14 @@ function check_default_records(&$dns_records, $domain)
         // Default MS Exchange
         'autodiscover', 'sip', 'lyncdiscover', 'msoid', 'enterpriseregistration', 'enterpriseenrollment',
         // Common
-        '_cf-custom-hostname', '_domainconnect', '_dmarc', 'dev', 'staging', 'stagingwww', 'calendar', 'docs', 'sites', 'start', 'email',
-        'fax', 'files', 'imap', 'pop', 'smtp', 'mobileemail',
-        'remote', 'course', 'blog', 'server', 'ns1', 'ns2', 'secure', 'vpn', 'm', 'shop', 'test', 'portal', 'host',
-        'ww1', 'support', 'web', 'bbs', 'mx', 'cloud', 'forum', 'owa', 'www2', 'admin', 'cdn', 'api', 'app',
-        'exchange', 'gov', 'news', 'vps', 'ns', 'mail2', 'mx0', 'mx1', 'mailserver', 'server', 'r.1', 'r.2', 'r.3',
-        'spam', 'auth', 'sso', 'webapps', 'securemail', 'online', 'signin', 'account', 'myonline', 'myaccount'
+        '_cf-custom-hostname', '_domainconnect', '_dmarc', 'www.dev', 'dev', 'www.staging', 'staging',
+        'stagingwww', 'calendar', 'www.calendar', 'docs', 'sites', 'start', 'email', 'fax', 'files', 'imap',
+        'pop', 'smtp', 'mobileemail', 'remote', 'course', 'blog', 'server', 'ns1', 'ns2', 'secure',
+        'vpn', 'm', 'shop', 'test', 'portal', 'host', 'ww1', 'support', 'web', 'bbs', 'mx', 'cloud',
+        'forum', 'owa', 'www2', 'admin', 'cdn', 'api', 'app', 'exchange', 'gov', 'news', 'vps', 'ns',
+        'mail2', 'mx0', 'mx1', 'mailserver', 'server', 'r.1', 'r.2', 'r.3', 'spam', 'auth', 'sso',
+        'webapps', 'securemail', 'online', 'signin', 'account', 'myonline', 'myaccount', 'origin',
+        'www.account', 'staff', 'training', 'terminal', 'pay', 'watch', 'www.webmail',
     ];
     // sanity check
     $default_subdomains = array_unique($default_subdomains);
@@ -1571,37 +1593,28 @@ function check_default_records(&$dns_records, $domain)
     // Google
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('google._domainkey.' . $domain, DNS_TXT));
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('ga1._domainkey.' . $domain, DNS_TXT));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('google._domainkey.' . $domain, DNS_CNAME));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('ga1._domainkey.' . $domain, DNS_CNAME));
     // MS 365
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('selector1._domainkey.' . $domain, DNS_TXT));
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('selector2._domainkey.' . $domain, DNS_TXT));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('selector1._domainkey.' . $domain, DNS_CNAME));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('selector2._domainkey.' . $domain, DNS_CNAME));
     // Mailchimp
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k1._domainkey.' . $domain, DNS_TXT));
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k2._domainkey.' . $domain, DNS_TXT));
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k3._domainkey.' . $domain, DNS_TXT));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k1._domainkey.' . $domain, DNS_CNAME));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k2._domainkey.' . $domain, DNS_CNAME));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('k3._domainkey.' . $domain, DNS_CNAME));
     // Cloudflare
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_cf-custom-hostname.' . $domain, DNS_TXT));
     // Campaign Monitor
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('cm._domainkey.' . $domain, DNS_TXT));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('cm._domainkey.' . $domain, DNS_CNAME));
     // MXRoute
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('x._domainkey.' . $domain, DNS_TXT));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('x._domainkey.' . $domain, DNS_CNAME));
     // Mailgun
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('smtp._domainkey.' . $domain, DNS_TXT));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('smtp._domainkey.' . $domain, DNS_CNAME));
     // turboSMTP
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('turbo-smtp._domainkey.' . $domain, DNS_TXT));
-    merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('turbo-smtp._domainkey.' . $domain, DNS_CNAME));
     // SendGrid
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('s1._domainkey.' . $domain, DNS_TXT));
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('s2._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('smt._domainkey.' . $domain, DNS_TXT));
+    merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('smt2._domainkey.' . $domain, DNS_TXT));
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('m1._domainkey.' . $domain, DNS_TXT));
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('smtpapi._domainkey.' . $domain, DNS_TXT));
     // HubSpot
@@ -1632,6 +1645,13 @@ check_default_records($dns_records, $domain);
 if (!$is_root_domain && !in_array($root_domain, $country_tlds)) {
     check_default_records($dns_records, $root_domain);
 }
+
+// Sort A records by host
+function sortByHost($a, $b)
+{
+    return strcmp($a["host"], $b["host"]);
+}
+usort($dns_records['a'], 'sortByHost');
 
 // Sort MX records by priority
 function sortByPriority($a, $b)
@@ -1711,6 +1731,18 @@ function translate_org($org)
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ" crossorigin="anonymous">
     <title>Domain Inspector</title>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-0XDKVS3VTR"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+
+        function gtag() {
+            dataLayer.push(arguments);
+        }
+        gtag('js', new Date());
+
+        gtag('config', 'G-0XDKVS3VTR');
+    </script>
 
     <style>
         @font-face {
@@ -3316,8 +3348,6 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
                         <?php
                         // https://protodave.com/tools/dkim-key-checker/
                         if ($dkim_records) {
-
-
                             foreach ($dkim_records as $dkim) {
                                 $alert = ($dkim['key_bits'] < 1024) ? ' INSECURE (<1024)' : '';
                                 if (isset($dkim['cname'])) $cname = " <abbr title='CNAME'>&rarr; {$dkim['cname']}</abbr>";
