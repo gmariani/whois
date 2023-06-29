@@ -297,7 +297,7 @@ function get_dns_record($host, $type)
                         // Bail, just use built-in and kill the erroneous TTL
                         $result = dns_get_record($host, $type);
                     }
-                } else if (!str_contains($error_message, 'The domain name referenced in the query does not exist')) {
+                } else if (!str_contains($error_message, 'The domain name referenced in the query does not exist') && $type !== DNS_DNSKEY && $type !== DNS_DS) {
                     error_log("get_dns_record()1: " . $host . ', ' . $type_string);
                     error_log("get_dns_record()2: " . $error_message);
                     // Bail, just use built-in and kill the erroneous TTL
@@ -1286,6 +1286,7 @@ function get_nameservers_ip($host)
     if (false === $host) return [];
 
     $response = dns_get_record($host, DNS_NS);
+    if (false === $response) return [];
     if (count($response)) {
         return array_map(function ($record) {
             return ['host' => $record['target'], 'ip' => get_host_by_name($record['target'])];
