@@ -539,7 +539,7 @@ function get_registrar($whois)
     if (strpos($lower_company, 'godaddy') !== false) {
         $company = 'GoDaddy';
     } elseif (strpos($lower_company, 'google') !== false) {
-        $company = 'Google';
+        $company = 'Google Domains (Squarespace)';
     } elseif (strpos($lower_company, 'register.com') !== false) {
         $company = 'Register.com';
     } elseif (strpos($lower_company, 'wild west domains') !== false) {
@@ -1629,17 +1629,17 @@ function translate_org($org)
     } elseif (strpos($lower_org, 'coursevector') !== false) {
         $org = 'CourseVector';
     } elseif (strpos($lower_org, 'sourcedns') !== false) {
-        $org = 'Liquid Web';
+        $org = 'Liquid Web, L.L.C';
     } elseif (strpos($lower_org, 'bluehost') !== false) {
         $org = 'BlueHost';
     } elseif (strpos($lower_org, 'media temple') !== false) {
-        $org = 'Media Temple';
+        $org = 'Media Temple (GoDaddy)';
     } elseif (strpos($lower_org, 'godaddy') !== false) {
         $org = 'GoDaddy';
     } elseif (strpos($lower_org, 'digitalocean') !== false) {
         $org = 'DigitalOcean';
-    } elseif (strpos($lower_org, 'centurylink') !== false) {
-        $org = 'CenturyLink Communications';
+    } elseif (strpos($lower_org, 'lumen') !== false) {
+        $org = 'Lumen Technologies (formerly CenturyLink)';
     } elseif (strpos($lower_org, 'squarespace') !== false) {
         $org = 'Squarespace';
     } elseif (str_contains($lower_org, 'nexcess')) {
@@ -1654,13 +1654,17 @@ function translate_org($org)
     return !empty($org) ? $org : 'Unknown/Self';
 }
 
-function get_web_host($dns_records)
+function get_web_host($dns_records, $domain)
 {
     foreach ($dns_records['a'] as $record) {
-        $ip = $record['ip'];
-        $ip_info = get_location($ip);
-        return $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
+        // Don't just use the first A record you find, try to match the specific query
+        if ($record['host'] === $domain) {
+            $ip = $record['ip'];
+            $ip_info = get_location($ip);
+            return $ip_info ? translate_org($ip_info->org ?? '') : 'API Rate Limit';
+        }
     }
+    return 'Unknown';
 }
 
 function get_email_host($dns_records)
@@ -1684,9 +1688,11 @@ function get_email_host($dns_records)
         } elseif (strpos($uri, 'mail.eo.outlook.com') !== false) {
             $email_host['Office365'] = 'Microsoft 365';
         } elseif (strpos($uri, 'googlemail.com') !== false) {
-            $email_host['GMail'] = 'GMail';
+            $email_host['GMail'] = 'Google Gmail';
         } elseif (strpos($uri, 'aspmx.l.google.com') !== false) {
-            $email_host['GMail'] = 'GMail';
+            $email_host['GMail'] = 'Google Gmail';
+        } elseif (strpos($uri, 'mxrouting.net') !== false) {
+            $email_host['MXroute'] = 'MXroute';
         } elseif (strpos($uri, 'emailsrvr.com') !== false) {
             $email_host['Rackspace'] = 'Rackspace Email Hosting';
         } elseif (strpos($uri, 'ess.barracudanetworks.com') !== false) {
@@ -1708,7 +1714,7 @@ function get_email_host($dns_records)
         } elseif (strpos($uri, 'comcast.net') !== false) {
             $email_host['comcast'] = 'Comcast';
         } elseif (strpos($uri, 'sourcedns') !== false) {
-            $email_host['sourcedns'] = 'Liquid Web';
+            $email_host['sourcedns'] = 'Liquid Web, L.L.C';
         } elseif (strpos($uri, 'netsolmail.net') !== false) {
             $email_host['netsol'] = 'Network Solutions Hosted Email';
         } elseif (strpos($uri, 'zoho.com') !== false) {
@@ -1734,6 +1740,8 @@ function get_email_host($dns_records)
             $is_spam_filter = true;
         } elseif (strpos($uri, 'ionos') !== false) {
             $email_host['ionos'] = 'IONOS by 1&1 Internet';
+        } elseif (strpos($uri, 'coxmail') !== false) {
+            $email_host['cox'] = ' Cox Communications, Inc';
         } else {
             $email_host['Unknown/Self'] = 'Unknown/Self';
         }
@@ -1796,63 +1804,69 @@ function get_email_host($dns_records)
 
 function get_dns_host($dns_records)
 {
-    $email_host = [];
+    $dns_host = [];
     foreach ($dns_records['ns'] as $record) {
         $uri = strtolower($record['target']);
         // use unique index so we auto filter duplicates
         if (strpos($uri, 'cloudflare.com') !== false) {
-            $email_host['cloudflare'] = 'Cloudflare';
+            $dns_host['cloudflare'] = 'Cloudflare';
         } elseif (strpos($uri, 'domaincontrol.com') !== false) {
-            $email_host['GoDaddy'] = 'GoDaddy';
+            $dns_host['GoDaddy'] = 'GoDaddy';
+        } elseif (strpos($uri, 'googledomains.com') !== false) {
+            $dns_host['squarespace'] = 'Google Domains  (Squarespace)';
         } elseif (strpos($uri, 'bluehost.com') !== false) {
-            $email_host['bluehost'] = 'BlueHost';
+            $dns_host['bluehost'] = 'BlueHost';
         } elseif (strpos($uri, 'hostgator.com') !== false) {
-            $email_host['HostGator'] = 'HostGator';
+            $dns_host['HostGator'] = 'HostGator';
         } elseif (strpos($uri, 'websitewelcome.com') !== false) {
-            $email_host['HostGator'] = 'HostGator';
+            $dns_host['HostGator'] = 'HostGator';
         } elseif (strpos($uri, 'microsoftonline.com') !== false) {
-            $email_host['microsoft'] = 'Microsoft 365';
+            $dns_host['microsoft'] = 'Microsoft 365';
         } elseif (strpos($uri, 'theplanet.com') !== false) {
-            $email_host['softlayer'] = 'SoftLayer';
+            $dns_host['softlayer'] = 'SoftLayer';
         } elseif (strpos($uri, 'mediatemple.net') !== false) {
-            $email_host['mediatemple'] = 'Media Temple';
+            $dns_host['mediatemple'] = 'Media Temple';
         } elseif (strpos($uri, 'dnszone') !== false) {
-            $email_host['coursevector'] = 'CourseVector';
+            $dns_host['coursevector'] = 'CourseVector';
         } elseif (strpos($uri, 'nexcess') !== false) {
-            $email_host['nexcess'] = 'Nexcess (Liquid Web)';
+            $dns_host['nexcess'] = 'Nexcess (Liquid Web)';
         } elseif (strpos($uri, 'awsdns') !== false) {
-            $email_host['amazon'] = 'AWS Route 53';
+            $dns_host['amazon'] = 'AWS Route 53';
         } elseif (strpos($uri, 'registeredsite.com') !== false) {
-            $email_host['netsol'] = 'Register.com';
+            $dns_host['netsol'] = 'Register.com';
         } elseif (strpos($uri, 'register.com') !== false) {
-            $email_host['netsol'] = 'Register.com';
+            $dns_host['netsol'] = 'Register.com';
         } elseif (strpos($uri, 'worldnic') !== false) {
-            $email_host['netsol'] = 'Network Solutions';
+            $dns_host['netsol'] = 'Network Solutions';
         } elseif (strpos($uri, 'wordpress.com') !== false) {
-            $email_host['wordpress'] = 'WordPress.com';
+            $dns_host['wordpress'] = 'WordPress.com';
         } elseif (strpos($uri, 'name-services.com') !== false) {
-            $email_host['enom'] = 'eNom (Tucows)';
+            $dns_host['enom'] = 'eNom (Tucows)';
         } elseif (strpos($uri, 'hover.com') !== false) {
-            $email_host['tucows'] = 'Tucows';
+            $dns_host['tucows'] = 'Tucows';
         } elseif (strpos($uri, 'ui-dns.') !== false) {
-            $email_host['1and1'] = '1&1 Internet';
+            $dns_host['1and1'] = '1&1 Internet';
         } elseif (strpos($uri, 'digitalocean.com') !== false) {
-            $email_host['digitalocean'] = 'DigitalOcean';
+            $dns_host['digitalocean'] = 'DigitalOcean';
         } elseif (strpos($uri, '.azure-dns.') !== false) {
-            $email_host['microsoft'] = 'Microsoft Azure';
+            $dns_host['microsoft'] = 'Microsoft Azure';
         } elseif (strpos($uri, 'squarespacedns.com') !== false) {
-            $email_host['squarespace'] = 'Squarespace';
+            $dns_host['squarespace'] = 'Squarespace';
         } elseif (strpos($uri, 'nsone.net') !== false) {
-            $email_host['ns1'] = 'NS1.';
+            $dns_host['ns1'] = 'NS1.';
         } elseif (strpos($uri, 'sgvps.net') !== false) {
-            $email_host['siteground'] = 'SiteGround';
+            $dns_host['siteground'] = 'SiteGround';
         } elseif (strpos($uri, 'savvis.net') !== false) {
-            $email_host['centurylink'] = 'CenturyLink Communications';
+            $dns_host['lumen'] = 'Lumen Technologies (formerly CenturyLink)';
+        } elseif (strpos($uri, 'inmotionhosting.com') !== false) {
+            $dns_host['inmotion'] = 'InMotion Hosting, Inc';
+        } elseif (strpos($uri, 'coxmail.com') !== false) {
+            $dns_host['cox'] = ' Cox Communications, Inc';
         } else {
-            $email_host['Unknown/Host'] = 'Unknown/Host';
+            $dns_host['Unknown/Host'] = "Unknown ({$uri})";
         }
     }
-    return implode(', ', $email_host);
+    return implode(', ', $dns_host);
 }
 
 
@@ -2148,14 +2162,14 @@ if ($domain === '') {
                                         <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
                                         <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
                                     </svg></button></h3>
-                            <div class="alert alert-light"><?= get_web_host($dns_records) ?></div>
+                            <div class="alert alert-light"><?= get_web_host($dns_records, $domain) ?></div>
                         </div>
                         <div class="col-6">
                             <h3>Email Host <button type="button" class="btn btn-help" data-bs-container="body" data-bs-toggle="popover" data-bs-content="Also known as an email provider, this is where the email is located. If you do not have any email using this domain name, this will be blank."><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-circle" viewBox="0 0 16 16">
                                         <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
                                         <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
                                     </svg></button></h3>
-                            <div class="alert alert-light"><?= get_email_host($dns_records) ?></div>
+                            <div class="alert alert-light"><?= get_email_host($dns_records, $domain) ?></div>
                         </div>
                     </div>
                 </section>
