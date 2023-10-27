@@ -1477,7 +1477,7 @@ function check_default_records(&$dns_records, $domain)
         'forum', 'owa', 'www2', 'admin', 'cdn', 'api', 'app', 'exchange', 'gov', 'news', 'vps', 'ns',
         'mail2', 'mx0', 'mx1', 'mailserver', 'server', 'r.1', 'r.2', 'r.3', 'spam', 'auth', 'sso',
         'webapps', 'securemail', 'online', 'signin', 'account', 'myonline', 'myaccount', 'origin',
-        'www.account', 'staff', 'training', 'terminal', 'pay', 'watch', 'www.webmail',
+        'www.account', 'staff', 'training', 'terminal', 'pay', 'watch', 'www.webmail', 'intranet'
     ];
     // sanity check
     $default_subdomains = array_unique($default_subdomains);
