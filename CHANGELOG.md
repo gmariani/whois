@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [20231205]
+- Patched vendor/pear/net_dns2/Net/DNS2.php:generateError() to better handle errors
+- Patched vendor/pear/net_dns2/Net/DNS2/Exception.php:__construct() to better handle errors
+
 ## [20230628]
 ### Added
 - Revised dashboard to simplify general items
