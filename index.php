@@ -46,6 +46,11 @@ function get_host_by_name($domain)
     global $host_cache, $ip_cache, $dns_count, $errors;
 
     if (!isset($ip_cache[$domain])) {
+        if (null === $domain) {
+            $errors[] = "Invalid domain, unable to lookup IP";
+            return false;
+        }
+
         $result = gethostbyname($domain);
         if ($result === $domain) {
             $errors[] = "Invalid domain, unable to lookup IP";
@@ -932,7 +937,7 @@ function geo_lookup_ip_api($ip)
     curl_close($ch);
 
     if (intval($http_code, 10) === 429) {
-        error_log("geo_lookup_ip_api(): Rate Limit " . print_r($body, true));
+        // error_log("geo_lookup_ip_api(): Rate Limit " . print_r($body, true));
         return false;
     }
 
@@ -1632,6 +1637,8 @@ function translate_org($org)
         $org = 'Liquid Web, L.L.C';
     } elseif (strpos($lower_org, 'bluehost') !== false) {
         $org = 'BlueHost';
+    } elseif (strpos($lower_org, 'unified layer') !== false) {
+        $org = 'BlueHost';
     } elseif (strpos($lower_org, 'media temple') !== false) {
         $org = 'Media Temple (GoDaddy)';
     } elseif (strpos($lower_org, 'godaddy') !== false) {
@@ -1677,10 +1684,14 @@ function get_email_host($dns_records)
     foreach ($dns_records['mx'] as $record) {
         $uri = strtolower($record['target']);
         $ip = get_host_by_name($record['target']);
+        $ip_info = get_location($ip);
+        $org = strtolower($ip_info ? translate_org($ip_info->org ?? '') : '');
         $email_target = $uri;
 
         // use unique index so we auto filter duplicates
-        if (strpos($uri, 'mx25.net') !== false) {
+        if (str_contains($org, 'bluehost')) {
+            $email_host['BlueHost'] = 'BlueHost';
+        } elseif (strpos($uri, 'mx25.net') !== false) {
             $email_host['PostLayer'] = 'PostLayer';
             $is_spam_filter = true;
         } elseif (strpos($uri, 'protection.outlook.com') !== false) {
@@ -1816,6 +1827,8 @@ function get_dns_host($dns_records)
             $dns_host['squarespace'] = 'Google Domains  (Squarespace)';
         } elseif (strpos($uri, 'bluehost.com') !== false) {
             $dns_host['bluehost'] = 'BlueHost';
+        } elseif (strpos($uri, 'hostmonster.com') !== false) {
+            $dns_host['hostmonster'] = 'HostMonster';
         } elseif (strpos($uri, 'hostgator.com') !== false) {
             $dns_host['HostGator'] = 'HostGator';
         } elseif (strpos($uri, 'websitewelcome.com') !== false) {
