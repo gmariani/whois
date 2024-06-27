@@ -297,8 +297,7 @@ function get_dns_record($host, $type)
                     } catch (Net_DNS2_Exception $e) {
                         // Skip
                         $error_message2 = $e->getMessage();
-                        error_log("get_dns_record()3: " . $host . ', ' . $type_string);
-                        error_log("get_dns_record()4: " . $error_message2);
+                        error_log("get_dns_record()3: " . $host . ', ' . $type_string . ', ' .  $error_message2);
                         // Bail, just use built-in and kill the erroneous TTL
                         $result = dns_get_record($host, $type);
                     }
@@ -1482,7 +1481,8 @@ function check_default_records(&$dns_records, $domain)
         'forum', 'owa', 'www2', 'admin', 'cdn', 'api', 'app', 'exchange', 'gov', 'news', 'vps', 'ns',
         'mail2', 'mx0', 'mx1', 'mailserver', 'server', 'r.1', 'r.2', 'r.3', 'spam', 'auth', 'sso',
         'webapps', 'securemail', 'online', 'signin', 'account', 'myonline', 'myaccount', 'origin',
-        'www.account', 'staff', 'training', 'terminal', 'pay', 'watch', 'www.webmail', 'intranet'
+        'www.account', 'staff', 'training', 'terminal', 'pay', 'watch', 'www.webmail',
+        'intranet', 'e', 'gateway', 'mobilemail', 'pda'
     ];
     // sanity check
     $default_subdomains = array_unique($default_subdomains);
@@ -1550,6 +1550,8 @@ function check_default_records(&$dns_records, $domain)
     //     }
     // }
 
+    $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_sip._tls.' . $domain, DNS_SRV));
+    $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_sipfederationtls._tls.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_autodiscover._tcp.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_caldav._tcp.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_caldavs._tcp.' . $domain, DNS_SRV));
