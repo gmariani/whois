@@ -1551,7 +1551,7 @@ function check_default_records(&$dns_records, $domain)
     // }
 
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_sip._tls.' . $domain, DNS_SRV));
-    $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_sipfederationtls._tls.' . $domain, DNS_SRV));
+    $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_sipfederationtls._tcp.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_autodiscover._tcp.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_caldav._tcp.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_caldavs._tcp.' . $domain, DNS_SRV));
@@ -1656,6 +1656,8 @@ function translate_org($org)
         $org = 'Nexcess';
     } elseif (strpos($lower_org, 'google') !== false) {
         $org = 'Google';
+    } elseif (strpos($lower_org, 'web-hosting.com') !== false) {
+        $org = 'Namecheap, Inc.';
     } elseif (str_contains($lower_org, 'amazon-aes') !== false) {
         // AMAZON-AES
         $org = 'Amazon';
@@ -1754,7 +1756,9 @@ function get_email_host($dns_records)
         } elseif (strpos($uri, 'ionos') !== false) {
             $email_host['ionos'] = 'IONOS by 1&1 Internet';
         } elseif (strpos($uri, 'coxmail') !== false) {
-            $email_host['cox'] = ' Cox Communications, Inc';
+            $email_host['cox'] = 'Cox Communications, Inc';
+        } elseif (strpos($uri, 'jellyfish.systems') !== false) {
+            $email_host['namecheap'] = 'Namecheap, Inc.';
         } else {
             $email_host['Unknown/Self'] = 'Unknown/Self';
         }
@@ -1876,7 +1880,9 @@ function get_dns_host($dns_records)
         } elseif (strpos($uri, 'inmotionhosting.com') !== false) {
             $dns_host['inmotion'] = 'InMotion Hosting, Inc';
         } elseif (strpos($uri, 'coxmail.com') !== false) {
-            $dns_host['cox'] = ' Cox Communications, Inc';
+            $dns_host['cox'] = 'Cox Communications, Inc';
+        } elseif (strpos($uri, 'namecheaphosting.com') !== false) {
+            $dns_host['namecheap'] = 'Namecheap, Inc.';
         } else {
             $dns_host['Unknown/Host'] = "Unknown ({$uri})";
         }
