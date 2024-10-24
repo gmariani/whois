@@ -6,7 +6,7 @@ $dotenv->load();
 
 error_reporting(E_ALL ^ E_WARNING);
 set_time_limit(20);
-ini_set("default_socket_timeout", 3000);
+ini_set("default_socket_timeout", 1000);
 $host_cache = [];
 $ip_cache = [];
 $dns_cache = [];
@@ -835,8 +835,8 @@ function get_arin($ip)
     curl_setopt($ch, CURLOPT_URL, 'http://whois.arin.net/rest/ip/' . $ip);
     curl_setopt($ch, CURLOPT_HEADER, 0);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15); //timeout in seconds
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 3); //timeout in seconds
     curl_setopt($ch, CURLOPT_HTTPHEADER, array('Accept: application/json'));
 
     // execute
@@ -1987,6 +1987,26 @@ function get_dns_host($dns_records)
     return implode(', ', $dns_host);
 }
 
+function get_time_difference(float $start)
+{
+    $duration = microtime(true) - $start;
+
+    $temp = (int) $duration;
+    $hours = floor(($temp %= 86400) / 3600);
+    $minutes = floor(($temp %= 3600) / 60);
+    $seconds = (int) $duration % 60;
+
+    if ($hours || $minutes) {
+        return (
+            ($hours ? "{$hours} hrs " : '') +
+            ($minutes ? "{$minutes} mins " : '') +
+            round($seconds, 4) . " s "
+        );
+    }
+
+    return round($duration, 4) . " s ";
+}
+
 $start_timer = microtime(true);
 error_log('=START====================================');
 $domain = isset($_GET['q']) ? strtolower(trim($_GET['q'])) : '';
@@ -1997,45 +2017,45 @@ if ($domain === '') {
 } else {
     $has_query = true;
 
-    error_log("Start get_clean_domain({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_clean_domain({$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $domain = get_clean_domain($domain);
-    error_log("End get_clean_domain({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_clean_domain({$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
-    error_log("Start get_root_domain({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_root_domain({$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $root_domain = get_root_domain($domain);
-    error_log("End get_root_domain({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_root_domain({$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     $is_root_domain = $domain === $root_domain ? true : false;
 
-    error_log("Start get_whois({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_whois({$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $whois = get_whois($domain);
-    error_log("End get_whois({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_whois({$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
-    error_log("Start get_host_by_name({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_host_by_name({$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $ip = get_host_by_name($domain);
-    error_log("End get_host_by_name({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_host_by_name({$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
-    error_log("Start get_location({$ip}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_location({$ip}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $location = get_location($ip);
-    error_log("End get_location({$ip}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_location({$ip}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
-    error_log("Start has_ssl({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start has_ssl({$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $ssl = has_ssl($domain);
-    error_log("End has_ssl({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End has_ssl({$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     $http = $ssl ? 'https://' : 'http://';
     $headers = get_headers($http . $domain, 1);
 
-    error_log("Start get_nameservers_ip({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_nameservers_ip({$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $nameservers_hosts = get_nameservers_ip($domain);
-    error_log("End get_nameservers_ip({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_nameservers_ip({$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     $nameservers = array_map(function ($ns) {
         return $ns['ip'];
@@ -2048,10 +2068,10 @@ if ($domain === '') {
     $arpa_host = $ip ? implode('.', array_reverse(explode('.', $ip))) . ".in-addr.arpa" : false;
     // error_log($arpa_host);
 
-    error_log("Start get_nameservers_ip({$arpa_host}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_nameservers_ip({$arpa_host}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $arpa_nameservers_hosts = get_nameservers_ip($arpa_host);
-    error_log("End get_nameservers_ip({$arpa_host}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_nameservers_ip({$arpa_host}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     $arpa_nameservers = array_map(function ($ns) {
         return $ns['ip'];
@@ -2062,15 +2082,15 @@ if ($domain === '') {
     // TODO fail gracefully when given an arpa address directly
 
     // For DS lookup
-    error_log("Start get_tld({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_tld({$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $tld = get_tld($domain);
-    error_log("End get_tld({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_tld({$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
-    error_log("Start get_nameservers_ip({$tld}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_nameservers_ip({$tld}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $tld_nameservers_hosts = get_nameservers_ip($tld);
-    error_log("End get_nameservers_ip({$tld}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_nameservers_ip({$tld}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     $tld_nameservers = array_map(function ($ns) {
         return $ns['ip'];
@@ -2081,9 +2101,9 @@ if ($domain === '') {
 
     // error_log(print_r($nameservers, true));
     error_log("{$domain} DNS Resolve nameservers: " . json_encode($nameservers));
-    $dns_resolver = new Net_DNS2_Resolver(['nameservers' => $nameservers, 'timeout' => 3]);
-    $tld_dns_resolver = new Net_DNS2_Resolver(['nameservers' => $tld_nameservers, 'timeout' => 3]);
-    $arpa_dns_resolver = new Net_DNS2_Resolver(['nameservers' => $arpa_nameservers, 'timeout' => 3]);
+    $dns_resolver = new Net_DNS2_Resolver(['nameservers' => $nameservers, 'timeout' => 1]);
+    $tld_dns_resolver = new Net_DNS2_Resolver(['nameservers' => $tld_nameservers, 'timeout' => 1]);
+    $arpa_dns_resolver = new Net_DNS2_Resolver(['nameservers' => $arpa_nameservers, 'timeout' => 1]);
 
     // Get just the last location's data
     foreach ($headers as $key => $value) {
@@ -2098,7 +2118,7 @@ if ($domain === '') {
     $date_now = new DateTime();
     $date_now->setTimestamp($now);
 
-    error_log("Start get_dns_record() - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_dns_record() - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $dns_records = array(
         'a' => get_dns_record($domain, DNS_A),
@@ -2116,39 +2136,39 @@ if ($domain === '') {
         'srv' => get_dns_record($domain, DNS_SRV),
         'naptr' => get_dns_record($domain, DNS_NAPTR)
     );
-    error_log("End get_dns_record() - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_dns_record() - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     // error_log('check_default_records');
     $country_tlds = ['co.uk'];
 
     // Check any default subdomains
-    error_log("Start check_default_records(dns_records, {$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start check_default_records(dns_records, {$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     check_default_records($dns_records, $domain);
-    error_log("End check_default_records(dns_records, {$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End check_default_records(dns_records, {$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     // If we are working with a subdomain, merge in the parent/root domains records
     if (!$is_root_domain && !in_array($root_domain, $country_tlds)) {
-        error_log("Start check_default_records(dns_records, {$root_domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+        error_log("Start check_default_records(dns_records, {$root_domain}) - " . get_time_difference($start_timer));
         $start_func_timer = microtime(true);
         check_default_records($dns_records, $root_domain);
-        error_log("End check_default_records(dns_records, {$root_domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+        error_log("End check_default_records(dns_records, {$root_domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
     }
 
     usort($dns_records['a'], 'sortByHost');
     usort($dns_records['mx'], 'sortByPriority');
 
     // error_log('get_spf');
-    error_log("Start get_spf(dns_records, {$dns_records['txt']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_spf(dns_records, {$dns_records['txt']}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $spf_records = get_spf($dns_records['txt']);
-    error_log("End get_spf(dns_records, {$dns_records['txt']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_spf(dns_records, {$dns_records['txt']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     // error_log('get_dkim');
-    error_log("Start get_dkim({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_dkim({$domain}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $dkim_records = get_dkim($domain);
-    error_log("End get_dkim({$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_dkim({$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     // error_log(print_r($dkim_records, true));
     $dns_records['dkim'] = [];
@@ -2162,13 +2182,13 @@ if ($domain === '') {
         $dns_records['dmarc'][] = $dmarc['raw'];
     }
     // error_log('get_arin');
-    error_log("Start get_arin({$ip}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_arin({$ip}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $arin = get_arin($ip);
-    error_log("End get_arin({$ip}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_arin({$ip}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
 
     // error_log('get_registrar');
-    error_log("Start get_registrar({$whois}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+    error_log("Start get_registrar({$whois}) - " . get_time_difference($start_timer));
     $start_func_timer = microtime(true);
     $domain_data = array(
         'registrar' => get_registrar($whois),
@@ -2177,7 +2197,7 @@ if ($domain === '') {
         'dnssec' => get_dnssec($whois),
         'nameservers' => get_nameservers($whois)
     );
-    error_log("End get_registrar({$whois}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+    error_log("End get_registrar({$whois}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
     // $errors[] = "Domain Data:<br><pre>" . print_r($domain_data, true) . '</pre>';
 }
 
@@ -2278,13 +2298,13 @@ if ($domain === '') {
                                     <dt class="col-sm-4">Server IP</dt>
                                     <dd class="col-sm-8"><?= $ip ?></dd>
                                     <?php
-                                    error_log("Start get_location_address({$location}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                    error_log("Start get_location_address(location) - " . get_time_difference($start_timer));
                                     $start_func_timer = microtime(true);
                                     ?>
                                     <dt class="col-sm-4">Server Location</dt>
                                     <dd class="col-sm-8"><?= $ip === false ? 'Unknown' : get_location_address($location) ?></dd>
                                     <?php
-                                    error_log("End get_location_address({$location}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                    error_log("End get_location_address(location) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     ?>
                                     <dt class="col-sm-4">Host</dt>
                                     <dd class="col-sm-8"><?= ($arin['customer_name'] ?? 'Unknown Customer Name') . ' (<a href="' . ($arin['customer_link'] ?? '#') . '" target="_blank">' . ($arin['customer_handle'] ?? 'Unknown Customer Handle') . '</a>)' ?></dd>
@@ -2350,12 +2370,12 @@ if ($domain === '') {
                                         <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
                                     </svg></button></h3>
                             <?php
-                            error_log("Start get_dns_host(dns_records) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                            error_log("Start get_dns_host(dns_records) - " . get_time_difference($start_timer));
                             $start_func_timer = microtime(true);
                             ?>
                             <div class="alert alert-light"><?= get_dns_host($dns_records) ?></div>
                             <?php
-                            error_log("End get_dns_host(dns_records) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                            error_log("End get_dns_host(dns_records) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                             ?>
                         </div>
                     </div>
@@ -2366,12 +2386,12 @@ if ($domain === '') {
                                         <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
                                     </svg></button></h3>
                             <?php
-                            error_log("Start get_web_host(dns_records, {$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                            error_log("Start get_web_host(dns_records, {$domain}) - " . get_time_difference($start_timer));
                             $start_func_timer = microtime(true);
                             ?>
                             <div class="alert alert-light"><?= get_web_host($dns_records, $domain) ?></div>
                             <?php
-                            error_log("End get_web_host(dns_records, {$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                            error_log("End get_web_host(dns_records, {$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                             ?>
                         </div>
                         <div class="col-6">
@@ -2380,12 +2400,12 @@ if ($domain === '') {
                                         <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
                                     </svg></button></h3>
                             <?php
-                            error_log("Start get_email_host(dns_records, {$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                            error_log("Start get_email_host(dns_records, {$domain}) - " . get_time_difference($start_timer));
                             $start_func_timer = microtime(true);
                             ?>
                             <div class="alert alert-light"><?= get_email_host($dns_records, $domain) ?></div>
                             <?php
-                            error_log("End get_email_host(dns_records, {$domain}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                            error_log("End get_email_host(dns_records, {$domain}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                             ?>
                         </div>
                     </div>
@@ -2402,7 +2422,7 @@ if ($domain === '') {
                                         <?php
                                         foreach ($dns_records['ptr'] as $record) {
 
-                                            error_log("Start reverse dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                            error_log("Start reverse dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                             $start_func_timer = microtime(true);
 
                                             $ip = get_host_by_name($record['target']);
@@ -2416,7 +2436,7 @@ if ($domain === '') {
                                                 <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo ($ip_info ? $ip_info->org : ''); ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
                                             </tr>
                                         <?php
-                                            error_log("End reverse dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                            error_log("End reverse dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                         }
                                         ?>
                                     </table>
@@ -2468,7 +2488,7 @@ if ($domain === '') {
 
                                     $zoneExportRaw .= "; SOA Record\n";
                                     foreach ($dns_records['soa'] as $record) {
-                                        error_log("Start soa dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start soa dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['mname']}.\t{$record['rname']}.\t(\n\t\t\t\t\t\t{$record['serial']} ;Serial Number\n\t\t\t\t\t\t{$record['refresh']} ;refresh\n\t\t\t\t\t\t{$record['retry']} ;retry\n\t\t\t\t\t\t{$record['expire']} ;expire\n\t\t\t\t\t\t{$record['minimum-ttl']}\t)\n";
@@ -2487,14 +2507,14 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Default TTL - <?php echo seconds_to_time($record['minimum-ttl']); ?>"><?php echo $record['minimum-ttl']; ?></td>
                                         </tr>
                                     <?php
-                                        error_log("End soa dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End soa dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     $zoneExportRaw .= "\n";
 
                                     if (count($dns_records['ns']) > 0) $zoneExportRaw .= "; NS Record\n";
 
                                     foreach ($dns_records['ns'] as $record) {
-                                        error_log("Start ns dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start ns dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['target']}.\n";
@@ -2518,14 +2538,14 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo ($ip_info ? $ip_info->org : ''); ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
                                         </tr>
                                     <?php
-                                        error_log("End ns dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End ns dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['ns']) > 0) $zoneExportRaw .= "\n";
 
                                     if (count($dns_records['a']) > 0) $zoneExportRaw .= "; A Record\n";
 
                                     foreach ($dns_records['a'] as $record) {
-                                        error_log("Start a dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start a dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['ip']}\n";
@@ -2551,13 +2571,13 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $record['host']; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $ip; ?></td>
                                         </tr>
                                     <?php
-                                        error_log("End a dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End a dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['a']) > 0) $zoneExportRaw .= "\n";
 
                                     if (count($dns_records['aaaa']) > 0) $zoneExportRaw .= "; AAAA Record\n";
                                     foreach ($dns_records['aaaa'] as $record) {
-                                        error_log("Start aaaa dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start aaaa dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['ipv6']}\n";
@@ -2573,13 +2593,13 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $record['host']; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $ip; ?></td>
                                         </tr>
                                     <?php
-                                        error_log("End aaaa dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End aaaa dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['aaaa']) > 0) $zoneExportRaw .= "\n";
 
                                     if (count($dns_records['cname']) > 0) $zoneExportRaw .= "; CNAME Record\n";
                                     foreach ($dns_records['cname'] as $record) {
-                                        error_log("Start cname dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start cname dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['target']}.\n";
@@ -2596,13 +2616,13 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="7"><?php echo $record['target']; ?></td>
                                         </tr>
                                     <?php
-                                        error_log("End cname dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End cname dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['cname']) > 0) $zoneExportRaw .= "\n";
 
                                     if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "; DNSKEY Record\n";
                                     foreach ($dns_records['dnskey'] as $record) {
-                                        error_log("Start dnskey dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start dnskey dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         // flags, protocol, algorithm, key
@@ -2690,12 +2710,12 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Public Key" colspan="4"><code><?php echo $record['key']; ?></code></td>
                                         </tr>
                                         <?php
-                                        error_log("End dnskey dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End dnskey dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['dnskey']) > 0) $zoneExportRaw .= "\n";
 
                                     if (isset($dns_records['caa'])) {
-                                        error_log("Start caa dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start caa dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         if (count($dns_records['caa']) > 0) $zoneExportRaw .= "; CAA Record\n";
@@ -2712,14 +2732,14 @@ if ($domain === '') {
                                                 <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="5"><code><?php echo $record['value']; ?></code></td>
                                             </tr>
                                         <?php
-                                            error_log("End caa dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                            error_log("End caa dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                         }
                                         if (count($dns_records['caa']) > 0) $zoneExportRaw .= "\n";
                                     }
 
                                     if (count($dns_records['mx']) > 0) $zoneExportRaw .= "; MX Record\n";
                                     foreach ($dns_records['mx'] as $record) {
-                                        error_log("Start mx dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start mx dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['pri']}\t{$record['target']}.\n";
@@ -2743,13 +2763,13 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="6"><?php echo $record['target']; ?></td>
                                         </tr>
                                     <?php
-                                        error_log("End mx dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End mx dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['mx']) > 0) $zoneExportRaw .= "\n";
 
                                     if (count($dns_records['txt']) > 0) $zoneExportRaw .= "; TXT Record\n";
                                     foreach ($dns_records['txt'] as $record) {
-                                        error_log("Start txt dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start txt dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t\"{$record['txt']}\"\n";
@@ -2766,13 +2786,13 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><code><?= htmlspecialchars($record['txt']) ?></code><button class="btn btn-clipboard" data-content="<?= base64_encode($record['txt']) ?>" type="button" title="Copy to clipboard"><i class="bi bi-clipboard"></i></button></td>
                                         </tr>
                                     <?php
-                                        error_log("End txt dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End txt dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['txt']) > 0) $zoneExportRaw .= "\n";
 
                                     if (count($dns_records['dmarc']) > 0) $zoneExportRaw .= "; DMARC Record\n";
                                     foreach ($dns_records['dmarc'] as $record) {
-                                        error_log("Start dmarc dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start dmarc dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t\"{$record['txt']}\"\n";
@@ -2785,7 +2805,7 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Value" colspan="7"><code><?php echo $record['txt']; ?></code></td>
                                         </tr>
                                     <?php
-                                        error_log("End dmarc dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End dmarc dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['dmarc']) > 0) $zoneExportRaw .= "\n";
 
@@ -2804,7 +2824,7 @@ if ($domain === '') {
 
                                     if (count($dns_records['srv']) > 0) $zoneExportRaw .= "; SRV Record\n";
                                     foreach ($dns_records['srv'] as $record) {
-                                        error_log("Start srv dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start srv dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['pri']}\t{$record['weight']}\t{$record['port']}\t{$record['target']}.\n";
@@ -2822,13 +2842,13 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Target - <?php echo $ip; ?>&#10;<?php echo $ip_info ? $ip_info->org : 'API Rate Limit'; ?>&#10;<?php echo get_location_address($ip_info); ?>" colspan="4"><?php echo $record['target']; ?></td>
                                         </tr>
                                     <?php
-                                        error_log("End srv dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End srv dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['srv']) > 0) $zoneExportRaw .= "\n";
 
                                     if (count($dns_records['naptr']) > 0) $zoneExportRaw .= "; NAPTR Record\n";
                                     foreach ($dns_records['naptr'] as $record) {
-                                        error_log("Start naptr dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4));
+                                        error_log("Start naptr dns record row ({$record['target']}) - " . get_time_difference($start_timer));
                                         $start_func_timer = microtime(true);
 
                                         $zoneExportRaw .= getZoneHost($domain, $record['host']) . "\t{$record['ttl']}\t{$record['class']}\t{$record['type']}\t{$record['order']}\t{$record['pref']}\t{$record['flags']}\t{$record['services']}\t{$record['regex']}\t{$record['replacement']}\n";
@@ -2846,7 +2866,7 @@ if ($domain === '') {
                                             <td data-bs-toggle="tooltip" data-bs-title="Replacement"><?php echo $record['replacement']; ?></td>
                                         </tr>
                                     <?php
-                                        error_log("End naptr dns record row ({$record['target']}) - " . round(((microtime(true) - $start_timer) / 60), 4) . ' - elapsed: ' . round(((microtime(true) - $start_func_timer) / 60), 4));
+                                        error_log("End naptr dns record row ({$record['target']}) - " . get_time_difference($start_timer) . ' - elapsed: ' . get_time_difference($start_func_timer));
                                     }
                                     if (count($dns_records['naptr']) > 0) $zoneExportRaw .= "\n";
 
@@ -3726,6 +3746,6 @@ parsed.extensions.subject_alt_name.dns_names: mariani.life*/
 </html>
 
 <?php
-error_log("End - " . round(((microtime(true) - $start_timer) / 60), 4));
+error_log("End - " . get_time_difference($start_timer));
 error_log('=END======================================');
 ?>
