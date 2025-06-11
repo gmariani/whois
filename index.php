@@ -1461,13 +1461,16 @@ function merge_unique_cname(bool $is_wildcard, array $wildcard_targets, array  &
     }
 }
 
-function merge_unique_txt(bool $is_wildcard, array $wildcard_targets, array  &$dns_records, array $txt_record)
+function merge_unique_txt(bool $is_wildcard, array $wildcard_targets, array &$dns_records, array $txt_record)
 {
     if ($txt_record[0]['type'] === 'CNAME') {
         merge_unique_cname($is_wildcard, $wildcard_targets, $dns_records, $txt_record);
     } else {
         if ($is_wildcard) {
-            if (!in_array($txt_record[0]['cname'], $wildcard_targets)) {
+            if (array_key_exists('cname', $txt_record[0]) && !in_array($txt_record[0]['cname'], $wildcard_targets)) {
+                $dns_records['txt'] = array_merge_unique($dns_records['txt'], $txt_record);
+            }
+            if (array_key_exists('txt', $txt_record[0]) && !in_array($txt_record[0]['txt'], $wildcard_targets)) {
                 $dns_records['txt'] = array_merge_unique($dns_records['txt'], $txt_record);
             }
         } else {
@@ -1654,6 +1657,18 @@ function check_default_records(&$dns_records, $domain)
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_caldavs._tcp.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_carddav._tcp.' . $domain, DNS_SRV));
     $dns_records['srv'] = array_merge_unique($dns_records['srv'], get_dns_record('_carddavs._tcp.' . $domain, DNS_SRV));
+
+    // Check TXT record wildcard
+    $wildcard_records = get_dns_record("mariani-is-cool.{$domain}", DNS_TXT);
+    $is_wildcard = count($wildcard_records) > 0 ? true : false;
+    $wildcard_targets = [];
+    if ($is_wildcard) {
+        foreach ($wildcard_records as &$wildcard_record) {
+            $wildcard_record['host'] = "*.{$domain}";
+            $wildcard_targets[] = $wildcard_record['txt'];
+        }
+        $dns_records['txt'] = array_merge_unique($dns_records['txt'], $wildcard_records);
+    }
 
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_caldav._tcp.' . $domain, DNS_TXT));
     merge_unique_txt($is_wildcard, $wildcard_targets, $dns_records, get_dns_record('_caldavs._tcp.' . $domain, DNS_TXT));
@@ -1998,8 +2013,8 @@ function get_time_difference(float $start)
 
     if ($hours || $minutes) {
         return (
-            ($hours ? "{$hours} hrs " : '') +
-            ($minutes ? "{$minutes} mins " : '') +
+            ($hours ? "{$hours} hrs " : '') .
+            ($minutes ? "{$minutes} mins " : '') .
             round($seconds, 4) . " s "
         );
     }
