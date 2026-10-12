@@ -27,6 +27,7 @@ final class EmailSection implements Section
             'dkim' => $this->dkim($context, $domain),
             'dmarc' => self::dmarc($dnsData['records']['dmarc']),
             'emailHost' => $this->emailHost($context, $domain, $dnsData['records']['mx'], $dnsData['targets']),
+            'dane' => $this->dane($context, $dnsData['records']['mx']),
             'dkimSelectors' => DataFile::load('dkim-selectors'),
         ];
     }
@@ -381,6 +382,28 @@ final class EmailSection implements Section
             return ['raw' => $txt, 'host' => $record['host'], 'tags' => $tags];
         }
         return null;
+    }
+
+    // ---------------------------------------------------------------- DANE
+
+    /**
+     * TLSA records at _25._tcp.<mx host>: which certificate each mail server must
+     * present (RFC 7672). They live in the mail provider's zone, so ask recursively.
+     *
+     * @param list<array<string,mixed>> $mx
+     * @return list<array{host:string,records:list<array<string,mixed>>}>
+     */
+    private function dane(Context $context, array $mx): array
+    {
+        $hosts = array_values(array_unique(array_column($mx, 'target')));
+        if (!$hosts) {
+            return [];
+        }
+        $out = [];
+        foreach ($context->dns()->lookup(array_map(fn ($h) => ["_25._tcp.{$h}", 'TLSA'], $hosts)) as $i => $result) {
+            $out[] = ['host' => $hosts[$i], 'records' => $result['records']];
+        }
+        return $out;
     }
 
     // ---------------------------------------------------------- Email host

@@ -41,11 +41,14 @@ export type DnsRecord = RecordBase &
         | { type: 'SRV'; pri: number; weight: number; port: number; target: string }
         | { type: 'NAPTR'; order: number; pref: number; flags: string; services: string; regex: string; replacement: string }
         | { type: 'CAA'; flags: number; tag: string; value: string }
-        | { type: 'DNSKEY'; flags: number; protocol: number; algorithm: number; key: string }
-        | { type: 'DS'; keytag: number; algorithm: number; digesttype: number; digest: string }
+        | { type: 'DNSKEY' | 'CDNSKEY'; flags: number; protocol: number; algorithm: number; key: string }
+        | { type: 'DS' | 'CDS'; keytag: number; algorithm: number; digesttype: number; digest: string }
+        | { type: 'HTTPS' | 'SVCB'; priority: number; target: string; params: Record<string, string> }
+        | { type: 'TLSA'; usage: number; selector: number; matchingType: number; data: string }
     );
 
-export type RecordOf<T extends DnsRecord['type']> = Extract<DnsRecord, { type: T }>;
+/** The record shape for one type, e.g. RecordOf<'MX'>. Works for members shared by two types (DS/CDS). */
+export type RecordOf<T extends DnsRecord['type']> = DnsRecord extends infer R ? (R extends { type: infer U } ? (T extends U ? R & { type: T } : never) : never) : never;
 
 export interface NameServer {
     host: string;
@@ -66,8 +69,13 @@ export interface DnsSection {
         txt: RecordOf<'TXT'>[];
         caa: RecordOf<'CAA'>[];
         naptr: RecordOf<'NAPTR'>[];
+        https: RecordOf<'HTTPS'>[];
+        /** DANE for the website: _443._tcp.<domain> */
+        tlsa: RecordOf<'TLSA'>[];
         dnskey: RecordOf<'DNSKEY'>[];
+        cdnskey: RecordOf<'CDNSKEY'>[];
         ds: RecordOf<'DS'>[];
+        cds: RecordOf<'CDS'>[];
         dmarc: RecordOf<'TXT'>[];
         ptr: RecordOf<'PTR'>[];
     };
@@ -84,9 +92,12 @@ export interface SubdomainsSection {
     checked: number;
     records: {
         a: RecordOf<'A'>[];
+        aaaa: RecordOf<'AAAA'>[];
         cname: RecordOf<'CNAME'>[];
+        mx: RecordOf<'MX'>[];
         txt: RecordOf<'TXT'>[];
         srv: RecordOf<'SRV'>[];
+        https: RecordOf<'HTTPS'>[];
     };
     stats: { queries: number; elapsedMs: number };
 }
@@ -235,6 +246,8 @@ export interface EmailSection {
     dkim: DkimKey[];
     dmarc: { raw: string; host: string; tags: Record<string, string> } | null;
     emailHost: { providers: string[]; gateway: boolean; via: string | null } | null;
+    /** TLSA records at _25._tcp.<mx host>, per mail server */
+    dane: { host: string; records: RecordOf<'TLSA'>[] }[];
     dkimSelectors: Record<string, string>;
 }
 

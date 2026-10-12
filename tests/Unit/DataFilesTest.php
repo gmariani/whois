@@ -17,7 +17,7 @@ final class DataFilesTest extends TestCase
     public function testSubdomainNames(): void
     {
         $data = DataFile::load('subdomains');
-        foreach (['hosts', 'txt', 'srv'] as $group) {
+        foreach (['hosts', 'mx', 'https', 'txt', 'srv'] as $group) {
             self::assertNotEmpty($data[$group], $group);
             foreach ($data[$group] as $name) {
                 self::assertMatchesRegularExpression(self::NAME, $name, "subdomains.php [{$group}]: '{$name}' is not a valid lower-case DNS name");

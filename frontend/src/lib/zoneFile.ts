@@ -65,9 +65,18 @@ function rdata(rec: DisplayRecord): string {
         case 'CAA':
             return `${rec.flags}\t${rec.tag}\t${quote(rec.value)}`;
         case 'DNSKEY':
+        case 'CDNSKEY':
             return `${rec.flags}\t${rec.protocol}\t${rec.algorithm}\t${rec.key}`;
         case 'DS':
+        case 'CDS':
             return `${rec.keytag}\t${rec.algorithm}\t${rec.digesttype}\t${rec.digest}`;
+        case 'HTTPS':
+        case 'SVCB': {
+            const params = Object.entries(rec.params).map(([k, v]) => (k === 'alpn' ? `${k}=${quote(v)}` : `${k}=${v}`));
+            return [rec.priority, rec.target ? `${rec.target}.` : '.', ...params].join(' ');
+        }
+        case 'TLSA':
+            return `${rec.usage}\t${rec.selector}\t${rec.matchingType}\t${rec.data}`;
     }
 }
 

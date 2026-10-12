@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [20261012]
 ### Changed
 - Split the single `index.php` into PHP classes (`app/`), a JSON API (`api.php`) and a React front-end (`frontend/`). `npm run package` builds `dist/`, the exact set of files to upload. Each section of the results page now loads independently and in parallel.
 - Registration data now comes from RDAP (registry, then registrar) located via IANA's bootstrap files; WHOIS is only used for TLDs without RDAP.
@@ -15,10 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Root domain detection uses the Public Suffix List (fixes `.co.uk` and similar).
 
 ### Fixed
+- A WHOIS server that didn't answer was cached as "no registration data" for an hour; temporary failures are no longer cached.
 - Bare IPv6 addresses were mangled by port stripping and reported as invalid domains.
 - `.uk` WHOIS name-server lists picked up stray words after the block.
 
 ### Added
+- New record types: HTTPS/SVCB (HTTP/3, encrypted ClientHello), TLSA/DANE for the website and for each mail server, and CDS/CDNSKEY (automated DNSSEC key updates, including the "remove DNSSEC" signal). The subdomain probe now also checks IPv6 (AAAA), MX on email-sending subdomains, and HTTPS on `www`.
 - Editable lists in `app/data/` (subdomains, DKIM selectors, providers), checked by `composer test`. The subdomain probe grew from 145 to 242 names, and more DNS, email and hosting providers are recognised.
 - Clean lookup URLs: `/projects/dns/google.com/` (also accepts `/https://example.com/...`). Old `?q=` links redirect.
 - API protection: per-page tokens bound to the session and domain, same-origin checks, per-IP and per-token rate limits.

@@ -61,13 +61,27 @@ final class RecordFormatter
                     'replacement' => self::host($rr->replacement),
                 ],
                 'CAA' => ['flags' => $rr->flags, 'tag' => (string) $rr->tag, 'value' => (string) $rr->value],
-                'DNSKEY' => [
+                // CDNSKEY/CDS: the zone asking its parent to publish new DNSSEC keys (RFC 7344).
+                'DNSKEY', 'CDNSKEY' => [
                     'flags' => $rr->flags,
                     'protocol' => $rr->protocol,
                     'algorithm' => $rr->algorithm->value,
                     'key' => $rr->key,
                 ],
-                'DS' => [
+                // HTTPS/SVCB (RFC 9460): how to connect, e.g. alpn="h3,h2" ipv4hint=…
+                'HTTPS', 'SVCB' => [
+                    'priority' => $rr->svc_priority,
+                    'target' => self::host($rr->target_name),
+                    'params' => self::svcParams($rr->svc_params),
+                ],
+                // TLSA (DANE, RFC 6698): which certificate a TLS service must present.
+                'TLSA' => [
+                    'usage' => $rr->cert_usage,
+                    'selector' => $rr->selector,
+                    'matchingType' => $rr->matching_type,
+                    'data' => strtoupper($rr->certificate),
+                ],
+                'DS', 'CDS' => [
                     'keytag' => $rr->keytag,
                     'algorithm' => $rr->algorithm->value,
                     'digesttype' => $rr->digesttype->value,
@@ -85,6 +99,19 @@ final class RecordFormatter
     private static function host(mixed $value): string
     {
         return rtrim(strtolower((string) $value), '.');
+    }
+
+    /**
+     * @param array<string,mixed> $params
+     * @return array<string,string> e.g. ['alpn' => 'h3,h2', 'ipv4hint' => '104.16.132.229,104.16.133.229']
+     */
+    private static function svcParams(array $params): array
+    {
+        $out = [];
+        foreach ($params as $name => $values) {
+            $out[(string) $name] = is_array($values) ? implode(',', array_map('strval', $values)) : (string) $values;
+        }
+        return $out;
     }
 
     /** The library renders SOA RNAME as "user@example.com"; zone files want "user.example.com". */

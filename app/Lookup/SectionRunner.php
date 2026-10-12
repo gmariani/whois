@@ -24,7 +24,7 @@ final class SectionRunner
         'locations' => [Sections\LocationsSection::class, 600],
     ];
 
-    private const CACHE_VERSION = 'v2'; // bump when a section's output shape changes
+    private const CACHE_VERSION = 'v3'; // bump when a section's output shape changes
 
     public static function exists(string $name): bool
     {
@@ -43,7 +43,7 @@ final class SectionRunner
             /** @var Sections\Section $section */
             $section = new $class();
             return $section->build($context);
-        }, $hit);
+        }, $hit, fn (array $data) => empty($data['transient']));
 
         return ['data' => $data, 'cached' => (bool) $hit];
     }

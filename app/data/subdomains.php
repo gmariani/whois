@@ -48,6 +48,16 @@ return [
         '_cf-custom-hostname', '_domainconnect',
     ],
 
+    // Looked up as MX records. Bulk senders (Amazon SES, Resend, Mailgun…) often need an
+    // MX on a sending subdomain for bounces, e.g. send.example.com.
+    'mx' => [
+        'send', 'bounce', 'bounces', 'mail', 'email', 'em', 'mg', 'mailgun', 'sendgrid', 'smtp',
+        'newsletter', 'news', 'marketing', 'notifications', 'notify', 'reply', 'return',
+    ],
+
+    // Looked up as HTTPS records (the apex is always checked). One query each, so keep it short.
+    'https' => ['www'],
+
     // Looked up as TXT records (verification and policy records).
     'txt' => [
         '_dmarc', '_mta-sts', '_smtp._tls', '_bimi', 'default._bimi',

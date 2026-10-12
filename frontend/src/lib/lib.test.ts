@@ -5,7 +5,8 @@ import { mergeRecords } from './records';
 import { buildZoneFile } from './zoneFile';
 
 const records = (overrides: Partial<DnsSection['records']>): DnsSection['records'] => ({
-    soa: [], ns: [], a: [], aaaa: [], cname: [], mx: [], txt: [], caa: [], naptr: [], dnskey: [], ds: [], dmarc: [], ptr: [],
+    soa: [], ns: [], a: [], aaaa: [], cname: [], mx: [], txt: [], caa: [], naptr: [], https: [], tlsa: [],
+    dnskey: [], cdnskey: [], ds: [], cds: [], dmarc: [], ptr: [],
     ...overrides,
 });
 
@@ -29,7 +30,7 @@ describe('mergeRecords', () => {
             domains: ['example.com'],
             wildcard: false,
             checked: 1,
-            records: { a: [{ ...base, ttl: 299, host: 'www.example.com', type: 'A', ip: '192.0.2.1' }], cname: [], txt: [], srv: [] },
+            records: { a: [{ ...base, ttl: 299, host: 'www.example.com', type: 'A', ip: '192.0.2.1' }], aaaa: [], cname: [], mx: [], txt: [], srv: [], https: [] },
             stats: { queries: 0, elapsedMs: 0 },
         };
         expect(mergeRecords(apex, subs)).toHaveLength(1);
@@ -84,6 +85,21 @@ describe('buildZoneFile', () => {
 
     it('keeps TXT strings split and escapes quotes', () => {
         expect(zone).toContain('TXT\t"say \\"hi\\"" "part2"');
+    });
+
+    it('writes HTTPS and TLSA records in zone-file syntax', () => {
+        const extra = buildZoneFile(
+            'example.com',
+            mergeRecords(
+                dns({
+                    https: [{ ...base, host: 'example.com', type: 'HTTPS', priority: 1, target: '', params: { alpn: 'h3,h2', ipv4hint: '192.0.2.1' } }],
+                    tlsa: [{ ...base, host: '_443._tcp.example.com', type: 'TLSA', usage: 3, selector: 1, matchingType: 1, data: 'ABCD' }],
+                }),
+                null,
+            ),
+        );
+        expect(extra).toContain('example.com.\t300\tIN\tHTTPS\t1 . alpn="h3,h2" ipv4hint=192.0.2.1\n');
+        expect(extra).toContain('_443._tcp\t300\tIN\tTLSA\t3\t1\t1\tABCD\n');
     });
 
     it('leaves out DS records, which belong to the parent zone', () => {

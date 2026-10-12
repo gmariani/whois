@@ -49,6 +49,36 @@ final class DnsRecordsTest extends TestCase
         self::assertSame('32996839A6D808AFE3EB4A795A0E6A7A39A76FC52FF228B22B76F6D63826F2B9', $ds['digest']);
     }
 
+    public function testHttpsRecord(): void
+    {
+        // What Cloudflare publishes for proxied sites.
+        $https = self::format('cloudflare.com. 300 IN HTTPS 1 . alpn="h3,h2" ipv4hint=104.16.132.229,104.16.133.229');
+        self::assertSame(1, $https['priority']);
+        self::assertSame('', $https['target'], '"." means the record\'s own name');
+        self::assertSame(['alpn' => 'h3,h2', 'ipv4hint' => '104.16.132.229,104.16.133.229'], $https['params']);
+    }
+
+    public function testTlsaRecord(): void
+    {
+        // Proton Mail's real DANE record for its MX host.
+        $tlsa = self::format('_25._tcp.mail.protonmail.ch. 1200 IN TLSA 3 1 1 6111a5698d23c89e09c36ff833c1487edc1b0c841f87c49dae8f7a09e11e979e');
+        self::assertSame([3, 1, 1], [$tlsa['usage'], $tlsa['selector'], $tlsa['matchingType']]);
+        self::assertSame('6111A5698D23C89E09C36FF833C1487EDC1B0C841F87C49DAE8F7A09E11E979E', $tlsa['data']);
+    }
+
+    public function testChildDnssecRecords(): void
+    {
+        $cds = self::format('cloudflare.com. 3600 IN CDS 2371 13 2 32996839a6d808afe3eb4a795a0e6a7a39a76fc52ff228b22b76f6d63826f2b9');
+        self::assertSame(['CDS', 2371, 13, 2], [$cds['type'], $cds['keytag'], $cds['algorithm'], $cds['digesttype']]);
+
+        // RFC 8078 "please remove DNSSEC" signal
+        $delete = self::format('example.com. 3600 IN CDS 0 0 0 00');
+        self::assertSame(0, $delete['algorithm']);
+
+        $cdnskey = self::format('cloudflare.com. 3600 IN CDNSKEY 257 3 13 mdsswUyr3DPW132mOi8V9xESWE8jTo0dxCjjnopKl+GqJxpVXckHAeF+KkxLbxILfDLUT0rAK9iUzy1L53eKGQ==');
+        self::assertSame(['CDNSKEY', 257, 13], [$cdnskey['type'], $cdnskey['flags'], $cdnskey['algorithm']]);
+    }
+
     public function testTxtKeepsStringsAndJoinsThem(): void
     {
         // Long TXT records (DKIM keys) are split into 255-byte strings.

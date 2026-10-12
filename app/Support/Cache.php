@@ -50,9 +50,10 @@ final class Cache
     /**
      * @template T
      * @param callable():T $compute
+     * @param (callable(T):bool)|null $cacheIf skip caching when this returns false (e.g. a transient failure)
      * @return T
      */
-    public function remember(string $key, int $ttl, callable $compute, ?bool &$hit = null): mixed
+    public function remember(string $key, int $ttl, callable $compute, ?bool &$hit = null, ?callable $cacheIf = null): mixed
     {
         $hit = false;
         $value = $this->get($key);
@@ -73,7 +74,7 @@ final class Cache
                 return $value;
             }
             $value = $compute();
-            if ($value !== null) {
+            if ($value !== null && ($cacheIf === null || $cacheIf($value))) {
                 $this->set($key, $value, $ttl);
             }
             return $value;

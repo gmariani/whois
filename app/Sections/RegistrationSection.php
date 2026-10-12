@@ -44,7 +44,8 @@ final class RegistrationSection implements Section
 
         $whois = $context->whois()->lookup($domain);
         if ($whois['text'] === '') {
-            return $this->result($domain, 'none', $whois['server'], null);
+            // Usually a timeout or a momentary refusal: don't cache it, so the next visitor retries.
+            return ['transient' => true] + $this->result($domain, 'none', $whois['server'], null);
         }
 
         $raw = [['label' => 'Registry', 'source' => $whois['server'], 'text' => $whois['text']]];

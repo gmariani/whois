@@ -141,6 +141,42 @@ final class ExampleDomainsTest extends TestCase
         self::assertNotEmpty($network['network']['cidrs']);
     }
 
+    // ---- Newer record types
+
+    public function testHttpsRecordAndChildDnssec(): void
+    {
+        $dns = self::section('cloudflare.com', 'dns');
+        self::assertNotEmpty($dns['records']['https'], 'Cloudflare publishes HTTPS records');
+        self::assertStringContainsString('h3', $dns['records']['https'][0]['params']['alpn'] ?? '');
+        self::assertNotEmpty($dns['records']['cds'], 'cloudflare.com publishes CDS');
+        self::assertNotEmpty($dns['records']['cdnskey']);
+    }
+
+    public function testSubdomainIpv6AndHttps(): void
+    {
+        $records = self::section('cloudflare.com', 'subdomains')['records'];
+        self::assertContains('www.cloudflare.com', array_column($records['aaaa'], 'host'));
+        self::assertContains('www.cloudflare.com', array_column($records['https'], 'host'));
+    }
+
+    public function testMxOnSendingSubdomain(): void
+    {
+        // Resend's bounce handling: send.<domain> MX -> Amazon SES
+        $mx = self::section('resend.dev', 'subdomains')['records']['mx'];
+        $send = array_values(array_filter($mx, fn ($r) => $r['host'] === 'send.resend.dev'));
+        self::assertNotEmpty($send);
+        self::assertStringContainsString('amazonses.com', $send[0]['target']);
+    }
+
+    public function testMailServerDane(): void
+    {
+        $dane = self::section('protonmail.com', 'email')['dane'];
+        self::assertNotEmpty($dane);
+        $withTlsa = array_filter($dane, fn ($d) => $d['records']);
+        self::assertNotEmpty($withTlsa, 'Proton publishes TLSA for its MX hosts');
+        self::assertSame(3, array_values($withTlsa)[0]['records'][0]['usage']);
+    }
+
     // ---- Edge cases
 
     public function testUnregisteredDomain(): void

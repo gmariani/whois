@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import { Await, CopyButton, Muted, SectionTitle, Tip } from '../components/ui';
-import { algorithmName, digestName, dnskeyFlags } from '../lib/dnssec';
+import { algorithmName, digestName, dnskeyFlags, svcSummary, tlsaMatching, tlsaSelector, tlsaUsage } from '../lib/dnssec';
 import { locationLabel, secondsToTime } from '../lib/format';
 import { mergeRecords, TYPE_LABELS, type DisplayRecord } from '../lib/records';
 import { buildZoneFile, download } from '../lib/zoneFile';
@@ -218,7 +218,32 @@ function RecordValue({ record, hostInfo, ipInfo }: { record: DisplayRecord; host
                     <Part tip="Replacement">{record.replacement || '.'}</Part>
                 </>
             );
-        case 'DNSKEY': {
+        case 'HTTPS':
+        case 'SVCB':
+            return (
+                <>
+                    <Part tip={record.priority === 0 ? 'Priority 0: alias mode (points to another name)' : 'Priority'}>{record.priority}</Part>
+                    <Part tip={record.target ? hostInfo(record.target) : 'Same name as the record ("." )'}>{record.target || '.'}</Part>
+                    {Object.entries(record.params).map(([key, value]) => (
+                        <Part key={key} tip={svcSummary({ [key]: value }).join('\n') || key}>
+                            <code>
+                                {key}={key === 'ech' ? `${value.slice(0, 16)}…` : value}
+                            </code>
+                        </Part>
+                    ))}
+                </>
+            );
+        case 'TLSA':
+            return (
+                <>
+                    <Part tip={`Usage — ${tlsaUsage(record.usage)}`}>{record.usage}</Part>
+                    <Part tip={`Selector — ${tlsaSelector(record.selector)}`}>{record.selector}</Part>
+                    <Part tip={`Matching — ${tlsaMatching(record.matchingType)}`}>{record.matchingType}</Part>
+                    <code>{record.data}</code>
+                </>
+            );
+        case 'DNSKEY':
+        case 'CDNSKEY': {
             const flags = dnskeyFlags(record.flags);
             return (
                 <>
@@ -234,6 +259,7 @@ function RecordValue({ record, hostInfo, ipInfo }: { record: DisplayRecord; host
             );
         }
         case 'DS':
+        case 'CDS':
             return (
                 <>
                     <Part tip="Key tag">{record.keytag}</Part>
@@ -242,6 +268,9 @@ function RecordValue({ record, hostInfo, ipInfo }: { record: DisplayRecord; host
                     <code>{record.digest}</code>
                 </>
             );
+        default: {
+            const unhandled: never = record;
+            return <Muted>{String((unhandled as DisplayRecord).type)}</Muted>;
+        }
     }
-    return <Muted>—</Muted>;
 }

@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { Badge } from 'react-bootstrap';
+import { TlsaList } from '../components/Dane';
 import { Await, CodeBlock, Dl, Group, Muted, SectionTitle } from '../components/ui';
-import { algorithmName, digestName, dnskeyFlags } from '../lib/dnssec';
+import { algorithmName, digestName, dnskeyFlags, svcSummary } from '../lib/dnssec';
 import { base64ToHex, colonHex, formatDateTime, timeUntil } from '../lib/format';
-import type { DnsSection, HttpSection, TlsSection } from '../types';
+import type { DnsSection, HttpSection, RecordOf, TlsSection } from '../types';
 import type { Sections } from '../useSections';
 
 type Row = [ReactNode, ReactNode];
@@ -26,9 +27,28 @@ export function SecurityTab({ sections, onRetry }: { sections: Sections; onRetry
                 {(http) => <HttpHeaders http={http} />}
             </Await>
 
+            <SectionTitle className="mt-5">HTTPS DNS Record</SectionTitle>
+            <Await state={sections.dns} label="Checking HTTPS records" onRetry={() => onRetry('dns')}>
+                {(dns) => (
+                    <HttpsRecords
+                        records={[
+                            ...dns.records.https,
+                            ...(sections.subdomains.status === 'ready' ? sections.subdomains.data.records.https : []),
+                        ]}
+                    />
+                )}
+            </Await>
+
             <SectionTitle className="mt-5">SSL/TLS Certificate</SectionTitle>
             <Await state={sections.tls} label="Connecting on port 443" onRetry={() => onRetry('tls')}>
                 {(tls) => <Certificate tls={tls} />}
+            </Await>
+            <Await state={sections.dns} label="Checking DANE" onRetry={() => onRetry('dns')}>
+                {(dns) => (
+                    <Group title={<abbr title="DNS-based Authentication of Named Entities">DANE</abbr>}>
+                        <Dl rows={[['Certificate pin', <TlsaList records={dns.records.tlsa} />]]} />
+                    </Group>
+                )}
             </Await>
         </>
     );
@@ -93,7 +113,75 @@ function Dnssec({ dns, registryFlag }: { dns: DnsSection; registryFlag: boolean 
                     />
                 </Group>
             ))}
+            <ChildRecords dns={dns} />
         </>
+    );
+}
+
+/**
+ * CDS/CDNSKEY (RFC 7344/8078): the zone publishing the DS it wants the parent
+ * to hold, so registries that support it can roll keys automatically.
+ */
+function ChildRecords({ dns }: { dns: DnsSection }) {
+    const { cds, cdnskey, ds } = dns.records;
+    if (cds.length === 0 && cdnskey.length === 0) {
+        return (
+            <Group title="Automated Key Updates">
+                <Dl rows={[['CDS / CDNSKEY', <Muted>Not published (key changes must be done at the registrar by hand)</Muted>]]} />
+            </Group>
+        );
+    }
+    // "0 0 0 00" is the RFC 8078 signal to remove DNSSEC.
+    const deleting = cds.some((r) => r.algorithm === 0) || cdnskey.some((r) => r.algorithm === 0);
+    const key = (r: { keytag: number; digest: string }) => `${r.keytag}/${r.digest}`;
+    const inSync = cds.length > 0 && cds.every((c) => ds.some((d) => key(d) === key(c)));
+
+    return (
+        <Group title="Automated Key Updates">
+            <Dl
+                rows={[
+                    [
+                        'Status',
+                        deleting ? (
+                            <Badge bg="warning" text="dark">
+                                Asking the parent to remove DNSSEC
+                            </Badge>
+                        ) : inSync ? (
+                            <Badge bg="success">Published and matches the registry's DS</Badge>
+                        ) : (
+                            <Badge bg="info">Published; the registry hasn't picked up the change yet</Badge>
+                        ),
+                    ],
+                    ...(cds.length ? [['CDS key tags', cds.map((r) => `${r.keytag} (${digestName(r.digesttype)})`).join(', ')] as Row] : []),
+                    ...(cdnskey.length ? [['CDNSKEY', cdnskey.map((r) => algorithmName(r.algorithm)).join(', ')] as Row] : []),
+                ]}
+            />
+        </Group>
+    );
+}
+
+function HttpsRecords({ records }: { records: RecordOf<'HTTPS'>[] }) {
+    if (records.length === 0) {
+        return (
+            <Group>
+                <Dl rows={[['', 'No HTTPS record (browsers discover HTTP/3 and encrypted ClientHello the slower way)']]} />
+            </Group>
+        );
+    }
+    return (
+        <Group>
+            <Dl
+                rows={records.map((r): Row => [
+                    r.host,
+                    <>
+                        {(svcSummary(r.params).length ? svcSummary(r.params) : ['No connection hints']).map((line) => (
+                            <div key={line}>{line}</div>
+                        ))}
+                        {r.priority === 0 && <Muted>Alias to {r.target}</Muted>}
+                    </>,
+                ])}
+            />
+        </Group>
     );
 }
 

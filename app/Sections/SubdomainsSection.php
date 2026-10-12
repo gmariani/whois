@@ -18,7 +18,7 @@ final class SubdomainsSection implements Section
     public function build(Context $context): array
     {
         $started = microtime(true);
-        $records = ['a' => [], 'cname' => [], 'txt' => [], 'srv' => []];
+        $records = ['a' => [], 'aaaa' => [], 'cname' => [], 'mx' => [], 'txt' => [], 'srv' => [], 'https' => []];
         if (!$context->isDelegated()) {
             return ['domains' => [], 'wildcard' => false, 'checked' => 0, 'records' => $records, 'stats' => ['queries' => 0, 'elapsedMs' => 0]];
         }
@@ -37,9 +37,17 @@ final class SubdomainsSection implements Section
 
         foreach ($domains as $domain) {
             $probe = 'wildcard-check-' . bin2hex(random_bytes(4)) . '.' . $domain;
-            $questions = [[$probe, 'A'], [$probe, 'TXT']];
+            $probes = ['A', 'AAAA', 'TXT', 'MX'];
+            $questions = array_map(fn ($type) => [$probe, $type], $probes);
             foreach ($names['hosts'] as $sub) {
                 $questions[] = ["{$sub}.{$domain}", 'A'];
+                $questions[] = ["{$sub}.{$domain}", 'AAAA'];
+            }
+            foreach ($names['mx'] as $sub) {
+                $questions[] = ["{$sub}.{$domain}", 'MX'];
+            }
+            foreach ($names['https'] as $sub) {
+                $questions[] = ["{$sub}.{$domain}", 'HTTPS'];
             }
             foreach ($txtNames as $sub) {
                 $questions[] = ["{$sub}.{$domain}", 'TXT'];
@@ -47,14 +55,15 @@ final class SubdomainsSection implements Section
             foreach ($names['srv'] as $sub) {
                 $questions[] = ["{$sub}.{$domain}", 'SRV'];
             }
-            $checked += count($questions) - 2;
+            // Distinct names (several record types are asked for most of them).
+            $checked += count(array_unique(array_column($questions, 0))) - 1;
 
             // Only the alias itself matters here, so don't chase CNAMEs out of the zone.
             $results = $context->dns()->lookupKeyed($questions, $servers, false);
 
             // Anything a random name also returns is wildcard noise.
-            $wild = ['ips' => [], 'targets' => [], 'txt' => []];
-            foreach (['A', 'TXT'] as $type) {
+            $wild = ['ips' => [], 'targets' => [], 'txt' => [], 'mx' => []];
+            foreach ($probes as $type) {
                 $result = $results["{$probe}|{$type}"] ?? null;
                 if (!$result) {
                     continue;
@@ -68,11 +77,12 @@ final class SubdomainsSection implements Section
                     foreach ($result['records'] as $record) {
                         $wildcard = true;
                         $records[strtolower($type)][] = ['host' => "*.{$domain}"] + $record;
-                        if ($type === 'A') {
-                            $wild['ips'][] = $record['ip'];
-                        } else {
-                            $wild['txt'][] = $record['txt'];
-                        }
+                        match ($type) {
+                            'A' => $wild['ips'][] = $record['ip'],
+                            'AAAA' => $wild['ips'][] = $record['ipv6'],
+                            'TXT' => $wild['txt'][] = $record['txt'],
+                            'MX' => $wild['mx'][] = $record['target'],
+                        };
                     }
                 }
                 unset($results["{$probe}|{$type}"]);
@@ -92,6 +102,12 @@ final class SubdomainsSection implements Section
                 }
                 $type = strtolower($result['type']);
                 if ($type === 'a' && !array_diff(array_column($own, 'ip'), $wild['ips'])) {
+                    continue;
+                }
+                if ($type === 'aaaa' && !array_diff(array_column($own, 'ipv6'), $wild['ips'])) {
+                    continue;
+                }
+                if ($type === 'mx' && !array_diff(array_column($own, 'target'), $wild['mx'])) {
                     continue;
                 }
                 if ($type === 'txt' && !array_diff(array_column($own, 'txt'), $wild['txt'])) {

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Alert, Badge } from 'react-bootstrap';
+import { DaneTable } from '../components/Dane';
 import { Await, CodeBlock, CopyButton, Dl, Group, Muted, SectionTitle } from '../components/ui';
 import { locationLabel } from '../lib/format';
 import type { EmailSection, SpfServer, SpfTerm } from '../types';
@@ -37,6 +38,19 @@ export function EmailTab({ sections, onRetry }: { sections: Sections; onRetry: (
                         <abbr title="Domain-based Message Authentication, Reporting & Conformance">DMARC</abbr> Record
                     </SectionTitle>
                     <div className="bd-group row">{email.dmarc ? <Dmarc dmarc={email.dmarc} /> : <Dl rows={[['', 'None']]} />}</div>
+
+                    <SectionTitle className="mt-5">
+                        <abbr title="DNS-based Authentication of Named Entities">DANE</abbr> for Mail Servers
+                    </SectionTitle>
+                    <div className="bd-group row">
+                        <p>
+                            <em>
+                                TLSA records at <code>_25._tcp.&lt;mail server&gt;</code> tell sending servers which certificate to expect, so mail
+                                can't be intercepted with a fake one. They only count if the mail server's zone is DNSSEC-signed.
+                            </em>
+                        </p>
+                        {email.dane.length ? <DaneTable entries={email.dane} /> : <Dl rows={[['', 'No mail servers (no MX records)']]} />}
+                    </div>
                 </>
             )}
         </Await>

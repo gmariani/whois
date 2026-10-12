@@ -14,7 +14,10 @@ use Whois\Support\DomainName;
  */
 final class DnsSection implements Section
 {
-    private const DOMAIN_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'CAA', 'NAPTR'];
+    private const DOMAIN_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'CAA', 'NAPTR', 'HTTPS'];
+
+    /** Every record list this section returns (the front-end relies on all keys existing). */
+    public const RECORD_KEYS = ['soa', 'ns', 'a', 'aaaa', 'cname', 'mx', 'txt', 'caa', 'naptr', 'https', 'tlsa', 'dnskey', 'cdnskey', 'ds', 'cds', 'dmarc', 'ptr'];
 
     public function build(Context $context): array
     {
@@ -27,7 +30,7 @@ final class DnsSection implements Section
                 'zone' => null,
                 'delegated' => false,
                 'nameservers' => [],
-                'records' => array_fill_keys(['soa', 'ns', 'a', 'aaaa', 'cname', 'mx', 'txt', 'caa', 'naptr', 'dnskey', 'ds', 'dmarc', 'ptr'], []),
+                'records' => array_fill_keys(self::RECORD_KEYS, []),
                 'targets' => [],
                 'dsServer' => null,
                 'dnsHosts' => [],
@@ -39,16 +42,24 @@ final class DnsSection implements Section
         $zone = $authority['zone'];
         $servers = $authority['ips'] ?: null;
 
-        $questions = [[$zone, 'SOA'], [$zone, 'NS'], [$zone, 'DNSKEY'], ["_dmarc.{$domain}", 'TXT']];
+        $questions = [
+            [$zone, 'SOA'], [$zone, 'NS'], [$zone, 'DNSKEY'], [$zone, 'CDNSKEY'], [$zone, 'CDS'],
+            ["_dmarc.{$domain}", 'TXT'],
+            // DANE for the website itself (mail servers' TLSA is in the email section).
+            ["_443._tcp.{$domain}", 'TLSA'],
+        ];
         foreach (self::DOMAIN_TYPES as $type) {
             $questions[] = [$domain, $type];
         }
         $results = $dns->lookupKeyed($questions, $servers);
 
-        $records = array_fill_keys(['soa', 'ns', 'a', 'aaaa', 'cname', 'mx', 'txt', 'caa', 'naptr', 'dnskey', 'ds', 'dmarc', 'ptr'], []);
+        $records = array_fill_keys(self::RECORD_KEYS, []);
         $records['soa'] = $results["{$zone}|SOA"]['records'] ?? [];
         $records['ns'] = $results["{$zone}|NS"]['records'] ?? [];
         $records['dnskey'] = $results["{$zone}|DNSKEY"]['records'] ?? [];
+        $records['cdnskey'] = $results["{$zone}|CDNSKEY"]['records'] ?? [];
+        $records['cds'] = $results["{$zone}|CDS"]['records'] ?? [];
+        $records['tlsa'] = self::onlyOwn($results["_443._tcp.{$domain}|TLSA"] ?? null, $records['cname']);
         $records['dmarc'] = self::onlyOwn($results["_dmarc.{$domain}|TXT"] ?? null, $records['cname']);
 
         foreach (self::DOMAIN_TYPES as $type) {
