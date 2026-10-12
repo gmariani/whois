@@ -1,6 +1,36 @@
 {
     "require": {
-        "pear/net_dns2": "^1.5",
-        "vlucas/phpdotenv": "^5.5"
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-openssl": "*",
+        "vlucas/phpdotenv": "^5.6",
+        "maxmind-db/reader": "^1.12",
+        "mikepultz/netdns2": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Whois\\": "app/"
+        },
+        "exclude-from-classmap": [
+            "app/bin/",
+            "app/data/"
+        ]
+    },
+    "config": {
+        "vendor-dir": "app/vendor",
+        "optimize-autoloader": true
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Whois\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:live": "phpunit --testsuite live"
     }
 }

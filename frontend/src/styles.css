@@ -288,7 +288,7 @@ pre.test {
     color: red;
 }
 
-body.no-query > header {
+body.no-query .bd-navbar {
     margin: 40vh 0;
 }
 
@@ -299,4 +299,84 @@ body.no-query > header {
     color: var(--bs-body-color);
     border: 0;
     border-radius: 0.25rem;
+}
+
+/* ---- React front-end additions ---- */
+
+.section-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.75em 30px;
+    color: var(--bs-secondary-color);
+}
+
+.tab-spinner {
+    --bs-spinner-width: 0.75rem;
+    --bs-spinner-height: 0.75rem;
+    --bs-spinner-border-width: 0.15em;
+}
+
+.map-single {
+    height: 100%;
+    min-height: 320px;
+}
+
+.map-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bs-secondary-color);
+    background: var(--bs-tertiary-bg);
+}
+
+.map-info {
+    color: #333;
+    line-height: 1.5;
+}
+
+.tip-multiline .tooltip-inner {
+    white-space: pre-line;
+    text-align: left;
+    max-width: 360px;
+}
+
+.record-host {
+    min-width: 14rem;
+    overflow-wrap: anywhere;
+}
+
+.record-value code {
+    line-break: anywhere;
+}
+
+.record-part {
+    margin-right: 0.75em;
+    border-bottom: 1px dotted var(--bs-secondary-color);
+    cursor: help;
+}
+
+.code-copy {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+}
+
+.spf-modifier {
+    color: var(--bs-info) !important;
+}
+
+.spf-tree {
+    margin: 0.25rem 0 0.5rem;
+    padding-left: 1.25rem;
+    font-family: var(--bs-font-monospace);
+    font-size: 0.875em;
+}
+
+details > summary {
+    cursor: pointer;
+}
+
+.pre-line {
+    white-space: pre-line;
 }

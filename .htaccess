@@ -1,0 +1,19 @@
+# Only index.php, api.php and the built front-end (build/) should be reachable.
+# app/ (server code + vendor), storage/ (caches, GeoIP databases) and .env stay private.
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(app|storage|frontend|node_modules|dist)(/|$) - [F,L]
+
+    # Pretty lookup URLs: /google.com/ and /https://example.com/ go to index.php,
+    # which reads the original path from REQUEST_URI.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L,QSA]
+</IfModule>
+
+<FilesMatch "^(\.env.*|composer\.(json|lock)|package(-lock)?\.json|vite\.config\.ts|tsconfig\.json|\.user\.ini|.*\.md)$">
+    Require all denied
+</FilesMatch>

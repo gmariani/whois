@@ -1,0 +1,376 @@
+{
+    "arin_originas0_originautnums": [],
+    "cidr0_cidrs": [
+        {
+            "v4prefix": "140.82.112.0",
+            "length": 20
+        }
+    ],
+    "endAddress": "140.82.127.255",
+    "entities": [
+        {
+            "entities": [
+                {
+                    "events": [
+                        {
+                            "eventAction": "last changed",
+                            "eventDate": "2026-07-21T10:09:18-04:00"
+                        },
+                        {
+                            "eventAction": "registration",
+                            "eventDate": "2012-10-22T15:41:49-04:00"
+                        }
+                    ],
+                    "handle": "GITHU-ARIN",
+                    "links": [
+                        {
+                            "href": "https://rdap.arin.net/registry/entity/GITHU-ARIN",
+                            "rel": "self",
+                            "type": "application/rdap+json",
+                            "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+                        },
+                        {
+                            "href": "https://whois.arin.net/rest/poc/GITHU-ARIN",
+                            "rel": "alternate",
+                            "type": "application/xml",
+                            "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+                        }
+                    ],
+                    "objectClassName": "entity",
+                    "port43": "whois.arin.net",
+                    "remarks": [
+                        {
+                            "description": [
+                                "GitHub Network Operations"
+                            ],
+                            "title": "Registration Comments"
+                        }
+                    ],
+                    "roles": [
+                        "noc",
+                        "administrative",
+                        "technical"
+                    ],
+                    "status": [
+                        "validated"
+                    ],
+                    "vcardArray": [
+                        "vcard",
+                        [
+                            [
+                                "version",
+                                {},
+                                "text",
+                                "4.0"
+                            ],
+                            [
+                                "adr",
+                                {
+                                    "label": "88 Colin P Kelly Jr St\nSan Francisco\nCA\n94107\nUnited States"
+                                },
+                                "text",
+                                [
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                    ""
+                                ]
+                            ],
+                            [
+                                "fn",
+                                {},
+                                "text",
+                                "GitHub Ops"
+                            ],
+                            [
+                                "org",
+                                {},
+                                "text",
+                                "GitHub, Inc."
+                            ],
+                            [
+                                "kind",
+                                {},
+                                "text",
+                                "group"
+                            ],
+                            [
+                                "email",
+                                {},
+                                "text",
+                                "hostmaster@github.com"
+                            ],
+                            [
+                                "tel",
+                                {
+                                    "type": [
+                                        "work",
+                                        "voice"
+                                    ]
+                                },
+                                "text",
+                                "+1-415-735-4488"
+                            ]
+                        ]
+                    ]
+                },
+                {
+                    "events": [
+                        {
+                            "eventAction": "last changed",
+                            "eventDate": "2026-07-06T18:01:36-04:00"
+                        },
+                        {
+                            "eventAction": "registration",
+                            "eventDate": "2013-01-03T12:26:15-05:00"
+                        }
+                    ],
+                    "handle": "GITHU1-ARIN",
+                    "links": [
+                        {
+                            "href": "https://rdap.arin.net/registry/entity/GITHU1-ARIN",
+                            "rel": "self",
+                            "type": "application/rdap+json",
+                            "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+                        },
+                        {
+                            "href": "https://whois.arin.net/rest/poc/GITHU1-ARIN",
+                            "rel": "alternate",
+                            "type": "application/xml",
+                            "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+                        }
+                    ],
+                    "objectClassName": "entity",
+                    "port43": "whois.arin.net",
+                    "roles": [
+                        "abuse"
+                    ],
+                    "status": [
+                        "validated"
+                    ],
+                    "vcardArray": [
+                        "vcard",
+                        [
+                            [
+                                "version",
+                                {},
+                                "text",
+                                "4.0"
+                            ],
+                            [
+                                "adr",
+                                {
+                                    "label": "88 Colin P Kelly Jr Street\nSan Francisco\nCA\n94104\nUnited States"
+                                },
+                                "text",
+                                [
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                    ""
+                                ]
+                            ],
+                            [
+                                "fn",
+                                {},
+                                "text",
+                                "GitHub Abuse"
+                            ],
+                            [
+                                "org",
+                                {},
+                                "text",
+                                "GitHub"
+                            ],
+                            [
+                                "kind",
+                                {},
+                                "text",
+                                "group"
+                            ],
+                            [
+                                "email",
+                                {},
+                                "text",
+                                "noc@github.com"
+                            ],
+                            [
+                                "tel",
+                                {
+                                    "type": [
+                                        "work",
+                                        "voice"
+                                    ]
+                                },
+                                "text",
+                                "+1-415-857-5430"
+                            ]
+                        ]
+                    ]
+                }
+            ],
+            "events": [
+                {
+                    "eventAction": "last changed",
+                    "eventDate": "2024-11-25T11:09:46-05:00"
+                },
+                {
+                    "eventAction": "registration",
+                    "eventDate": "2012-10-22T14:48:45-04:00"
+                }
+            ],
+            "handle": "GITHU",
+            "links": [
+                {
+                    "href": "https://rdap.arin.net/registry/entity/GITHU",
+                    "rel": "self",
+                    "type": "application/rdap+json",
+                    "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+                },
+                {
+                    "href": "https://whois.arin.net/rest/org/GITHU",
+                    "rel": "alternate",
+                    "type": "application/xml",
+                    "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+                }
+            ],
+            "objectClassName": "entity",
+            "port43": "whois.arin.net",
+            "remarks": [
+                {
+                    "description": [
+                        "https://github.com\r",
+                        "Please contact us directly for matters pertaining to abuse.\r",
+                        "Urgent matters including DDoS are handled 24x7."
+                    ],
+                    "title": "Registration Comments"
+                }
+            ],
+            "roles": [
+                "registrant"
+            ],
+            "vcardArray": [
+                "vcard",
+                [
+                    [
+                        "version",
+                        {},
+                        "text",
+                        "4.0"
+                    ],
+                    [
+                        "fn",
+                        {},
+                        "text",
+                        "GitHub, Inc."
+                    ],
+                    [
+                        "adr",
+                        {
+                            "label": "88 Colin P Kelly Jr Street\nSan Francisco\nCA\n94107\nUnited States"
+                        },
+                        "text",
+                        [
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            ""
+                        ]
+                    ],
+                    [
+                        "kind",
+                        {},
+                        "text",
+                        "org"
+                    ]
+                ]
+            ]
+        }
+    ],
+    "events": [
+        {
+            "eventAction": "last changed",
+            "eventDate": "2021-12-14T20:28:48-05:00"
+        },
+        {
+            "eventAction": "registration",
+            "eventDate": "2018-04-25T15:34:18-04:00"
+        }
+    ],
+    "handle": "NET-140-82-112-0-1",
+    "ipVersion": "v4",
+    "links": [
+        {
+            "href": "https://rdap.arin.net/registry/ip/140.82.112.0",
+            "rel": "self",
+            "type": "application/rdap+json",
+            "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+        },
+        {
+            "href": "https://whois.arin.net/rest/net/NET-140-82-112-0-1",
+            "rel": "alternate",
+            "type": "application/xml",
+            "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+        }
+    ],
+    "name": "GITHU",
+    "notices": [
+        {
+            "description": [
+                "By using the ARIN RDAP/Whois service, you are agreeing to the RDAP/Whois Terms of Use"
+            ],
+            "links": [
+                {
+                    "href": "https://www.arin.net/resources/registry/whois/tou/",
+                    "rel": "terms-of-service",
+                    "type": "text/html",
+                    "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+                }
+            ],
+            "title": "Terms of Service"
+        },
+        {
+            "description": [
+                "If you see inaccuracies in the results, please visit: "
+            ],
+            "links": [
+                {
+                    "href": "https://www.arin.net/resources/registry/whois/inaccuracy_reporting/",
+                    "rel": "inaccuracy-report",
+                    "type": "text/html",
+                    "value": "https://rdap.arin.net/registry/ip/140.82.114.3"
+                }
+            ],
+            "title": "Whois Inaccuracy Reporting"
+        },
+        {
+            "description": [
+                "Copyright 1997-2026, American Registry for Internet Numbers, Ltd."
+            ],
+            "title": "Copyright Notice"
+        }
+    ],
+    "objectClassName": "ip network",
+    "parentHandle": "NET-140-0-0-0-0",
+    "port43": "whois.arin.net",
+    "rdapConformance": [
+        "nro_rdap_profile_0",
+        "rdap_level_0",
+        "cidr0",
+        "arin_originas0"
+    ],
+    "startAddress": "140.82.112.0",
+    "status": [
+        "active"
+    ],
+    "type": "DIRECT ALLOCATION"
+}

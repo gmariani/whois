@@ -1,0 +1,25 @@
+
+    Domain name:
+        example-shop.co.uk
+
+    Data validation:
+        Nominet was able to match the registrant's name and address against a 3rd party data source on 10-Dec-2012
+
+    Registrar:
+        123-Reg Limited t/a 123-reg [Tag = 123-REG]
+        URL: http://www.123-reg.co.uk
+
+    Relevant dates:
+        Registered on: 25-Oct-2005
+        Expiry date:  25-Oct-2027
+        Last updated:  08-Oct-2025
+
+    Registration status:
+        Registered until expiry date.
+
+    Name servers:
+        ns1.onetouchdns.co.uk     151.236.44.146
+        ns2.onetouchdns.co.uk     92.48.76.242
+
+    WHOIS lookup made at 12:00:00 12-Oct-2026
+

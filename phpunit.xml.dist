@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  composer test        offline unit tests (fast, deterministic)
+  composer test:live   example domains against the real internet (slow; results can change)
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="app/vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="app/vendor/autoload.php"
+         defaultTestSuite="unit"
+         colors="true"
+         cacheDirectory="storage/.phpunit.cache">
+    <testsuites>
+        <testsuite name="unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="live">
+            <directory>tests/Live</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <ini name="error_reporting" value="-1"/>
+    </php>
+</phpunit>

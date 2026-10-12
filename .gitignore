@@ -5,7 +5,9 @@
 /public/storage
 /storage/*.key
 /vendor
+/app/vendor
 .env
+.env.development
 .env.backup
 .env.production
 Homestead.json
@@ -16,3 +18,10 @@ yarn-error.log
 .phpunit.result.cache
 /.fleet
 /.idea
+
+# Build output and runtime data
+/build
+/dist
+/storage/*
+!/storage/.gitignore
+!/storage/.htaccess
